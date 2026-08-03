@@ -25,11 +25,19 @@ import {
   Typography,
   theme,
 } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  type UnsavedChangesDecision,
+  useUnsavedChangesGuard,
+} from '@/hooks/useUnsavedChangesGuard';
 import {
   type ExternalApiKeyItem,
   fetchDeploymentInfo,
   fetchSettings,
+  POLLING_COUNT_MAX,
+  POLLING_COUNT_MIN,
+  POLLING_INTERVAL_MAX,
+  POLLING_INTERVAL_MIN,
   pickSettingsError,
   syncCfWorkerDomains,
   testEmailNotification,
@@ -67,6 +75,22 @@ const SettingsPage: React.FC = () => {
     queryKey: ['settings'],
     queryFn: fetchSettings,
   });
+
+  const confirmUnsavedNavigation = useCallback(
+    ({ proceed, stay }: UnsavedChangesDecision) => {
+      modal.confirm({
+        title: '放弃未保存的更改并离开？',
+        content: '离开系统设置会丢失当前表单中尚未保存的修改。',
+        okText: '放弃并离开',
+        okButtonProps: { danger: true },
+        cancelText: '继续编辑',
+        onOk: proceed,
+        onCancel: stay,
+      });
+    },
+    [modal],
+  );
+  useUnsavedChangesGuard(dirty, confirmUnsavedNavigation);
 
   // 后端 GET 返回脱敏占位；PUT 时若值仍等于脱敏串则视为未修改（后端会跳过）
   const [secretMasks, setSecretMasks] = useState<Record<string, string>>({});
@@ -174,16 +198,6 @@ const SettingsPage: React.FC = () => {
     });
     setDirty(false);
   }, [dirty, settingsQuery.data, form]);
-
-  useEffect(() => {
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirty) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [dirty]);
 
   const buildKeysPayload = (): ExternalApiKeyItem[] | null => {
     const normalized = keyRows.map((k) => ({
@@ -541,11 +555,41 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="polling_interval" label="间隔（秒）">
-                    <InputNumber min={1} max={3600} style={{ width: '100%' }} />
+                  <Form.Item
+                    name="polling_interval"
+                    label="间隔（秒）"
+                    rules={[
+                      {
+                        type: 'number',
+                        min: POLLING_INTERVAL_MIN,
+                        max: POLLING_INTERVAL_MAX,
+                        message: `请输入 ${POLLING_INTERVAL_MIN}-${POLLING_INTERVAL_MAX} 秒`,
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      min={POLLING_INTERVAL_MIN}
+                      max={POLLING_INTERVAL_MAX}
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
-                  <Form.Item name="polling_count" label="最大次数（0 = 不限）">
-                    <InputNumber min={0} max={999} style={{ width: '100%' }} />
+                  <Form.Item
+                    name="polling_count"
+                    label="最大次数（0 = 不限）"
+                    rules={[
+                      {
+                        type: 'number',
+                        min: POLLING_COUNT_MIN,
+                        max: POLLING_COUNT_MAX,
+                        message: `请输入 ${POLLING_COUNT_MIN}-${POLLING_COUNT_MAX} 次`,
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      min={POLLING_COUNT_MIN}
+                      max={POLLING_COUNT_MAX}
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
                 </ProCard>
               ),

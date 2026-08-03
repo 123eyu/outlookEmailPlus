@@ -5,7 +5,7 @@
  * - 发现新邮件后尝试提取验证码
  */
 import { extractEmailVerification, fetchEmails } from './emails';
-import { fetchSettings } from './settings';
+import { fetchSettings, normalizePollingSettings } from './settings';
 
 export type PollStatus = 'idle' | 'polling' | 'stopped' | 'error' | 'found';
 
@@ -93,6 +93,10 @@ export async function loadPollSettingsFromServer(): Promise<PollSettings> {
   try {
     const res = await fetchSettings();
     const s = res?.settings || {};
+    const normalized = normalizePollingSettings(
+      Number(s.polling_interval ?? 10),
+      Number(s.polling_count ?? 5),
+    );
     settingsCache = {
       enabled: !!(
         s.enable_auto_polling === true ||
@@ -100,8 +104,8 @@ export async function loadPollSettingsFromServer(): Promise<PollSettings> {
         s.enable_auto_polling === 1 ||
         s.enable_auto_polling === '1'
       ),
-      interval: Number(s.polling_interval || 10) || 10,
-      maxCount: Number(s.polling_count || 5) || 5,
+      interval: normalized.polling_interval,
+      maxCount: normalized.polling_count,
     };
   } catch {
     /* keep cache */
@@ -110,11 +114,15 @@ export async function loadPollSettingsFromServer(): Promise<PollSettings> {
 }
 
 export function applyPollSettings(partial: Partial<PollSettings>) {
+  const normalized = normalizePollingSettings(
+    Number(partial.interval ?? settingsCache.interval),
+    Number(partial.maxCount ?? settingsCache.maxCount),
+  );
   settingsCache = {
     ...settingsCache,
     ...partial,
-    interval: Math.max(1, Number(partial.interval ?? settingsCache.interval) || 10),
-    maxCount: Math.max(0, Number(partial.maxCount ?? settingsCache.maxCount) || 0),
+    interval: normalized.polling_interval,
+    maxCount: normalized.polling_count,
   };
   // 运行中的轮询沿用新间隔需重启；此处仅更新缓存，UI 可选择 restart
   emit();

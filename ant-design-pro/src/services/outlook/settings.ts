@@ -20,15 +20,20 @@ export async function updateSettings(partial: AppSettings) {
   );
 }
 
+export const POLLING_INTERVAL_MIN = 3;
+export const POLLING_INTERVAL_MAX = 300;
+export const POLLING_COUNT_MIN = 0;
+export const POLLING_COUNT_MAX = 100;
+
 export function normalizePollingSettings(interval: number, maxCount: number) {
   const parsedInterval = Math.trunc(Number(interval));
   const parsedMaxCount = Math.trunc(Number(maxCount));
   return {
     polling_interval: Number.isFinite(parsedInterval)
-      ? Math.min(3600, Math.max(1, parsedInterval))
+      ? Math.min(POLLING_INTERVAL_MAX, Math.max(POLLING_INTERVAL_MIN, parsedInterval))
       : 10,
     polling_count: Number.isFinite(parsedMaxCount)
-      ? Math.min(999, Math.max(0, parsedMaxCount))
+      ? Math.min(POLLING_COUNT_MAX, Math.max(POLLING_COUNT_MIN, parsedMaxCount))
       : 5,
   };
 }

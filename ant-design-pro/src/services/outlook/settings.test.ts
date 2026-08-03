@@ -22,12 +22,16 @@ describe('settings service contracts', () => {
 
   it('normalizes polling settings to backend-supported bounds', () => {
     expect(normalizePollingSettings(0, -3)).toEqual({
-      polling_interval: 1,
+      polling_interval: 3,
       polling_count: 0,
     });
     expect(normalizePollingSettings(5000, 1200)).toEqual({
-      polling_interval: 3600,
-      polling_count: 999,
+      polling_interval: 300,
+      polling_count: 100,
+    });
+    expect(normalizePollingSettings(Number.NaN, Number.NaN)).toEqual({
+      polling_interval: 10,
+      polling_count: 5,
     });
   });
 

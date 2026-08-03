@@ -34,6 +34,7 @@ import {
 } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
+import { usePollingSettingsDraft } from '@/hooks/usePollingSettingsDraft';
 import { type AccountItem, fetchAccounts } from '@/services/outlook/accounts';
 import {
   deleteEmails,
@@ -65,6 +66,10 @@ import {
 } from '@/services/outlook/pollEngine';
 import {
   normalizePollingSettings,
+  POLLING_COUNT_MAX,
+  POLLING_COUNT_MIN,
+  POLLING_INTERVAL_MAX,
+  POLLING_INTERVAL_MIN,
   pickSettingsError,
   updatePollingSettings,
 } from '@/services/outlook/settings';
@@ -164,8 +169,13 @@ const MailboxPage: React.FC = () => {
   const [listSearch, setListSearch] = useState('');
   const [pollSnap, setPollSnap] = useState<PollSnapshot | undefined>();
   const [allPollSnaps, setAllPollSnaps] = useState<PollSnapshot[]>([]);
-  const [pollInterval, setPollInterval] = useState(10);
-  const [pollMaxCount, setPollMaxCount] = useState(5);
+  const {
+    interval: pollInterval,
+    maxCount: pollMaxCount,
+    setInterval: setPollInterval,
+    setMaxCount: setPollMaxCount,
+    acceptSettings: acceptPollSettings,
+  } = usePollingSettingsDraft(getPollSettings(), loadPollSettingsFromServer);
   const [pollSaving, setPollSaving] = useState(false);
   const [compactSearch, setCompactSearch] = useState('');
   const [compactSelected, setCompactSelected] = useState<number[]>([]);
@@ -214,10 +224,6 @@ const MailboxPage: React.FC = () => {
   }, [accounts, compactSearch]);
 
   useEffect(() => {
-    void loadPollSettingsFromServer().then((s) => {
-      setPollInterval(s.interval);
-      setPollMaxCount(s.maxCount);
-    });
     return subscribePoll((snaps) => {
       setAllPollSnaps(snaps);
       if (selectedEmail) setPollSnap(getPollSnapshot(selectedEmail));
@@ -488,6 +494,7 @@ const MailboxPage: React.FC = () => {
         return false;
       }
       applyPollSettings({ interval, maxCount });
+      acceptPollSettings({ interval, maxCount });
       message.success(
         announce
           ? `已保存并应用：间隔 ${interval}s / 次数 ${maxCount || '不限'}`
@@ -1303,16 +1310,16 @@ const MailboxPage: React.FC = () => {
           <Typography.Text strong>轮询高级设置</Typography.Text>
           <Typography.Text type="secondary">间隔(秒)</Typography.Text>
           <InputNumber
-            min={1}
-            max={3600}
+            min={POLLING_INTERVAL_MIN}
+            max={POLLING_INTERVAL_MAX}
             value={pollInterval}
             disabled={pollSaving}
             onChange={(v) => setPollInterval(Number(v) || 10)}
           />
           <Typography.Text type="secondary">最大次数(0=不限)</Typography.Text>
           <InputNumber
-            min={0}
-            max={999}
+            min={POLLING_COUNT_MIN}
+            max={POLLING_COUNT_MAX}
             value={pollMaxCount}
             disabled={pollSaving}
             onChange={(v) => setPollMaxCount(Number(v) || 0)}
