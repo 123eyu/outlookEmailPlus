@@ -34,6 +34,7 @@ import {
   type ExternalApiKeyItem,
   fetchDeploymentInfo,
   fetchSettings,
+  normalizePollingSettings,
   POLLING_COUNT_MAX,
   POLLING_COUNT_MIN,
   POLLING_INTERVAL_MAX,
@@ -145,6 +146,11 @@ const SettingsPage: React.FC = () => {
         ? s.external_api_ip_whitelist
         : '';
 
+    const pollingSettings = normalizePollingSettings(
+      Number(s.polling_interval ?? 10),
+      Number(s.polling_count ?? 5),
+    );
+
     form.setFieldsValue({
       enable_scheduled_refresh:
         s.enable_scheduled_refresh === 'true' ||
@@ -155,8 +161,8 @@ const SettingsPage: React.FC = () => {
       refresh_interval_days: Number(s.refresh_interval_days || 30),
       refresh_delay_seconds: Number(s.refresh_delay_seconds || 5),
       enable_auto_polling: !!s.enable_auto_polling,
-      polling_interval: Number(s.polling_interval || 10),
-      polling_count: Number(s.polling_count || 5),
+      polling_interval: pollingSettings.polling_interval,
+      polling_count: pollingSettings.polling_count,
       email_notification_enabled: !!s.email_notification_enabled,
       email_notification_recipient: s.email_notification_recipient || '',
       webhook_notification_enabled: !!s.webhook_notification_enabled,

@@ -25,6 +25,10 @@ describe('settings service contracts', () => {
       polling_interval: 3,
       polling_count: 0,
     });
+    expect(normalizePollingSettings(10, 0)).toEqual({
+      polling_interval: 10,
+      polling_count: 0,
+    });
     expect(normalizePollingSettings(5000, 1200)).toEqual({
       polling_interval: 300,
       polling_count: 100,
