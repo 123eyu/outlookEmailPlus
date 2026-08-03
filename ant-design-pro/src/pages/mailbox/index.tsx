@@ -34,25 +34,22 @@ import {
 } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
-import {
-  fetchAccounts,
-  type AccountItem,
-} from '@/services/outlook/accounts';
+import { type AccountItem, fetchAccounts } from '@/services/outlook/accounts';
 import {
   deleteEmails,
+  type EmailDetail,
+  type EmailFolder,
+  type EmailListItem,
   extractEmailVerification,
   fetchEmailDetail,
   fetchEmails,
   normalizeMethodParam,
   pickEmailsErrorMessage,
-  type EmailDetail,
-  type EmailFolder,
-  type EmailListItem,
 } from '@/services/outlook/emails';
 import {
   fetchGroups,
-  isTempMailboxGroup,
   type GroupItem,
+  isTempMailboxGroup,
 } from '@/services/outlook/groups';
 import {
   applyPollSettings,
@@ -61,19 +58,21 @@ import {
   getPollSnapshots,
   isPolling,
   loadPollSettingsFromServer,
+  type PollSnapshot,
   startPoll,
   stopPoll,
   subscribePoll,
-  type PollSnapshot,
 } from '@/services/outlook/pollEngine';
 import {
-  buildEmailSrcDoc,
-  sortEmailsByNewestFirst,
-} from '@/utils/emailHtml';
+  normalizePollingSettings,
+  pickSettingsError,
+  updatePollingSettings,
+} from '@/services/outlook/settings';
+import { buildEmailSrcDoc, sortEmailsByNewestFirst } from '@/utils/emailHtml';
 import {
   loadViewMode,
-  saveViewMode,
   type MailboxViewMode,
+  saveViewMode,
 } from '@/utils/mailboxLayout';
 
 const FOLDERS: Array<{ label: string; value: EmailFolder }> = [
@@ -167,6 +166,7 @@ const MailboxPage: React.FC = () => {
   const [allPollSnaps, setAllPollSnaps] = useState<PollSnapshot[]>([]);
   const [pollInterval, setPollInterval] = useState(10);
   const [pollMaxCount, setPollMaxCount] = useState(5);
+  const [pollSaving, setPollSaving] = useState(false);
   const [compactSearch, setCompactSearch] = useState('');
   const [compactSelected, setCompactSelected] = useState<number[]>([]);
   const [pullingEmails, setPullingEmails] = useState<Record<string, boolean>>(
@@ -207,7 +207,8 @@ const MailboxPage: React.FC = () => {
     const q = compactSearch.trim().toLowerCase();
     if (!q) return accounts;
     return accounts.filter((a) => {
-      const hay = `${a.email || ''} ${a.remark || ''} ${a.group_name || ''}`.toLowerCase();
+      const hay =
+        `${a.email || ''} ${a.remark || ''} ${a.group_name || ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [accounts, compactSearch]);
@@ -467,6 +468,45 @@ const MailboxPage: React.FC = () => {
     setTrusted(false);
   };
 
+  const persistPollSettings = async (announce: boolean) => {
+    const current = getPollSettings();
+    const normalized = normalizePollingSettings(pollInterval, pollMaxCount);
+    const interval = normalized.polling_interval;
+    const maxCount = normalized.polling_count;
+    const changed =
+      current.interval !== interval || current.maxCount !== maxCount;
+    if (!changed) {
+      if (announce) message.info('监听参数已是最新设置');
+      return true;
+    }
+
+    setPollSaving(true);
+    try {
+      const res = await updatePollingSettings(interval, maxCount);
+      if (res?.success === false) {
+        message.error(pickSettingsError(res, '保存监听参数失败'));
+        return false;
+      }
+      applyPollSettings({ interval, maxCount });
+      message.success(
+        announce
+          ? `已保存并应用：间隔 ${interval}s / 次数 ${maxCount || '不限'}`
+          : '监听参数已保存',
+      );
+      return true;
+    } catch (error: any) {
+      message.error(
+        pickSettingsError(
+          error?.data || error?.info || error?.response?.data,
+          error?.message || '保存监听参数失败',
+        ),
+      );
+      return false;
+    } finally {
+      setPollSaving(false);
+    }
+  };
+
   const onTogglePoll = async (email?: string) => {
     const target = email || selectedEmail;
     if (!target) return;
@@ -476,11 +516,12 @@ const MailboxPage: React.FC = () => {
       if (target === selectedEmail) setPollSnap(undefined);
       return;
     }
-    applyPollSettings({ interval: pollInterval, maxCount: pollMaxCount });
+    if (!(await persistPollSettings(false))) return;
+    const savedSettings = getPollSettings();
     await startPoll(target, {
       force: true,
-      interval: pollInterval,
-      maxCount: pollMaxCount,
+      interval: savedSettings.interval,
+      maxCount: savedSettings.maxCount,
     });
     message.success('已开始监听新邮件');
     if (target === selectedEmail) setPollSnap(getPollSnapshot(target));
@@ -551,12 +592,12 @@ const MailboxPage: React.FC = () => {
     return m;
   }, [allPollSnaps]);
 
-  const applyPollAdvanced = () => {
-    applyPollSettings({ interval: pollInterval, maxCount: pollMaxCount });
-    message.success(
-      `已应用监听参数：间隔 ${pollInterval}s / 次数 ${pollMaxCount || '不限'}（运行中需重新开始监听）`,
-    );
-  };
+  const cachedPollSettings = getPollSettings();
+  const pollSettingsDirty =
+    cachedPollSettings.interval !== pollInterval ||
+    cachedPollSettings.maxCount !== pollMaxCount;
+
+  const applyPollAdvanced = () => void persistPollSettings(true);
 
   // ── 左栏：分组 ──
   const groupsPane = (
@@ -575,8 +616,7 @@ const MailboxPage: React.FC = () => {
         locale={{ emptyText: '暂无分组' }}
         renderItem={(g) => {
           const active =
-            (g.id === 0 && groupId == null) ||
-            (g.id !== 0 && g.id === groupId);
+            (g.id === 0 && groupId == null) || (g.id !== 0 && g.id === groupId);
           return (
             <List.Item
               style={{
@@ -853,7 +893,9 @@ const MailboxPage: React.FC = () => {
                 {detail.subject || '无主题'}
               </Typography.Title>
               <Space wrap>
-                <Typography.Text type="secondary">信任原始 HTML</Typography.Text>
+                <Typography.Text type="secondary">
+                  信任原始 HTML
+                </Typography.Text>
                 <Switch checked={trusted} onChange={onToggleTrust} />
                 <Button
                   size="small"
@@ -884,10 +926,7 @@ const MailboxPage: React.FC = () => {
                   showIcon
                   message="最近提取结果"
                   description={
-                    <Typography.Paragraph
-                      copyable
-                      style={{ marginBottom: 0 }}
-                    >
+                    <Typography.Paragraph copyable style={{ marginBottom: 0 }}>
                       {lastVerification}
                     </Typography.Paragraph>
                   }
@@ -1261,12 +1300,13 @@ const MailboxPage: React.FC = () => {
     >
       <ProCard size="small" variant="outlined" style={{ marginBottom: 12 }}>
         <Space wrap align="center">
-          <Typography.Text strong>Compact Poll 高级</Typography.Text>
+          <Typography.Text strong>轮询高级设置</Typography.Text>
           <Typography.Text type="secondary">间隔(秒)</Typography.Text>
           <InputNumber
             min={1}
             max={3600}
             value={pollInterval}
+            disabled={pollSaving}
             onChange={(v) => setPollInterval(Number(v) || 10)}
           />
           <Typography.Text type="secondary">最大次数(0=不限)</Typography.Text>
@@ -1274,14 +1314,23 @@ const MailboxPage: React.FC = () => {
             min={0}
             max={999}
             value={pollMaxCount}
+            disabled={pollSaving}
             onChange={(v) => setPollMaxCount(Number(v) || 0)}
           />
-          <Button size="small" type="primary" onClick={applyPollAdvanced}>
-            应用到引擎
-          </Button>
+          <Tooltip title="写入系统设置；新监听立即使用，运行中的监听需重新开始">
+            <Button
+              size="small"
+              type={pollSettingsDirty ? 'primary' : 'default'}
+              loading={pollSaving}
+              disabled={!pollSettingsDirty}
+              onClick={applyPollAdvanced}
+            >
+              {pollSettingsDirty ? '保存并应用' : '已保存'}
+            </Button>
+          </Tooltip>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            当前缓存：{getPollSettings().interval}s /{' '}
-            {getPollSettings().maxCount || '∞'} · 活跃监听{' '}
+            已保存：{cachedPollSettings.interval}s /{' '}
+            {cachedPollSettings.maxCount || '∞'} · 活跃监听{' '}
             {allPollSnaps.filter((s) => s.status === 'polling').length}
           </Typography.Text>
         </Space>
@@ -1348,7 +1397,9 @@ const MailboxPage: React.FC = () => {
           message={pollSnap.lastMessage}
           description={
             pollSnap.verification ? (
-              <Typography.Text copyable>{pollSnap.verification}</Typography.Text>
+              <Typography.Text copyable>
+                {pollSnap.verification}
+              </Typography.Text>
             ) : null
           }
         />

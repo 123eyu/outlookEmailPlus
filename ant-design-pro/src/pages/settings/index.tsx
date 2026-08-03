@@ -1,4 +1,11 @@
-import { DeleteOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  SyncOutlined,
+  UndoOutlined,
+} from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIntl } from '@umijs/max';
@@ -16,9 +23,11 @@ import {
   Tabs,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import {
+  type ExternalApiKeyItem,
   fetchDeploymentInfo,
   fetchSettings,
   pickSettingsError,
@@ -30,7 +39,6 @@ import {
   triggerSystemUpdate,
   updateSettings,
   validateCron,
-  type ExternalApiKeyItem,
 } from '@/services/outlook/settings';
 
 type KeyRow = ExternalApiKeyItem & { _localId: string };
@@ -42,8 +50,10 @@ const SettingsPage: React.FC = () => {
   const { message, modal } = App.useApp();
   const intl = useIntl();
   const queryClient = useQueryClient();
+  const { token } = theme.useToken();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [keyRows, setKeyRows] = useState<KeyRow[]>([]);
   const [originalKeysCanonical, setOriginalKeysCanonical] = useState('[]');
   const [deployment, setDeployment] = useState<Record<string, any> | null>(
@@ -62,6 +72,7 @@ const SettingsPage: React.FC = () => {
   const [secretMasks, setSecretMasks] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (dirty) return;
     const s = settingsQuery.data?.settings;
     if (!s) return;
     const masks: Record<string, string> = {
@@ -75,9 +86,8 @@ const SettingsPage: React.FC = () => {
     };
     setSecretMasks(masks);
 
-    const keys: KeyRow[] = (Array.isArray(s.external_api_keys)
-      ? s.external_api_keys
-      : []
+    const keys: KeyRow[] = (
+      Array.isArray(s.external_api_keys) ? s.external_api_keys : []
     ).map((item: ExternalApiKeyItem) => ({
       ...item,
       api_key: item.api_key || item.api_key_masked || '',
@@ -162,7 +172,18 @@ const SettingsPage: React.FC = () => {
       update_method: s.update_method || 'watchtower',
       login_password: '',
     });
-  }, [settingsQuery.data, form]);
+    setDirty(false);
+  }, [dirty, settingsQuery.data, form]);
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [dirty]);
 
   const buildKeysPayload = (): ExternalApiKeyItem[] | null => {
     const normalized = keyRows.map((k) => ({
@@ -251,6 +272,7 @@ const SettingsPage: React.FC = () => {
       message.success(res.message || '设置已保存');
       form.setFieldValue('login_password', '');
       await queryClient.invalidateQueries({ queryKey: ['settings'] });
+      setDirty(false);
     } catch (error: any) {
       message.error(
         pickSettingsError(
@@ -346,6 +368,33 @@ const SettingsPage: React.FC = () => {
     setKeyRows((rows) =>
       rows.map((r) => (r._localId === localId ? { ...r, ...patch } : r)),
     );
+    setDirty(true);
+  };
+
+  const reloadSettings = async () => {
+    try {
+      const result = await settingsQuery.refetch();
+      if (result.error) throw result.error;
+      setDirty(false);
+      message.success('已重新加载服务器设置');
+    } catch (error: any) {
+      message.error(error?.message || '重新加载失败');
+    }
+  };
+
+  const onReload = () => {
+    if (!dirty) {
+      void reloadSettings();
+      return;
+    }
+    modal.confirm({
+      title: '放弃未保存的更改？',
+      content: '重新加载会用服务器设置覆盖当前表单，此操作无法撤销。',
+      okText: '放弃并重新加载',
+      okButtonProps: { danger: true },
+      cancelText: '继续编辑',
+      onOk: reloadSettings,
+    });
   };
 
   const sMeta = settingsQuery.data?.settings || {};
@@ -362,21 +411,43 @@ const SettingsPage: React.FC = () => {
       })}
       extra={
         <Space>
+          <Typography.Text type={dirty ? 'warning' : 'secondary'}>
+            {dirty ? '有未保存更改' : '所有更改已保存'}
+          </Typography.Text>
           <Button
+            icon={<ReloadOutlined />}
             loading={settingsQuery.isFetching}
-            onClick={() =>
-              void queryClient.invalidateQueries({ queryKey: ['settings'] })
-            }
+            onClick={onReload}
           >
             重新加载
           </Button>
-          <Button type="primary" loading={saving} onClick={() => void onSave()}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={saving}
+            disabled={!dirty}
+            onClick={() => void onSave()}
+          >
             保存
           </Button>
         </Space>
       }
     >
-      <Form form={form} layout="vertical" disabled={settingsQuery.isLoading}>
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={settingsQuery.isLoading}
+        onValuesChange={() => setDirty(true)}
+      >
+        {dirty ? (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="当前页面有未保存更改"
+            description="切换标签会保留当前输入；离开页面、刷新或重新加载前会提示确认。"
+          />
+        ) : null}
         <Tabs
           items={[
             {
@@ -398,30 +469,53 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="refresh_cron" label="Cron">
-                    <Input
-                      addonAfter={
-                        <Button
-                          type="link"
-                          size="small"
-                          onClick={async () => {
-                            const cron = form.getFieldValue('refresh_cron');
-                            await runTest(
-                              () => validateCron(String(cron || '')),
-                              'Cron 有效',
-                              'Cron 无效',
-                            );
-                          }}
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(previous, current) =>
+                      previous.use_cron_schedule !== current.use_cron_schedule
+                    }
+                  >
+                    {({ getFieldValue }) =>
+                      getFieldValue('use_cron_schedule') ? (
+                        <Form.Item name="refresh_cron" label="Cron">
+                          <Input
+                            addonAfter={
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={async () => {
+                                  const cron =
+                                    form.getFieldValue('refresh_cron');
+                                  await runTest(
+                                    () => validateCron(String(cron || '')),
+                                    'Cron 有效',
+                                    'Cron 无效',
+                                  );
+                                }}
+                              >
+                                校验
+                              </Button>
+                            }
+                          />
+                        </Form.Item>
+                      ) : (
+                        <Form.Item
+                          name="refresh_interval_days"
+                          label="刷新间隔（天）"
                         >
-                          校验
-                        </Button>
-                      }
-                    />
+                          <InputNumber
+                            min={1}
+                            max={365}
+                            style={{ width: '100%' }}
+                          />
+                        </Form.Item>
+                      )
+                    }
                   </Form.Item>
-                  <Form.Item name="refresh_interval_days" label="刷新间隔（天）">
-                    <InputNumber min={1} max={365} style={{ width: '100%' }} />
-                  </Form.Item>
-                  <Form.Item name="refresh_delay_seconds" label="账号间延迟（秒）">
+                  <Form.Item
+                    name="refresh_delay_seconds"
+                    label="账号间延迟（秒）"
+                  >
                     <InputNumber min={0} max={3600} style={{ width: '100%' }} />
                   </Form.Item>
                 </ProCard>
@@ -436,8 +530,8 @@ const SettingsPage: React.FC = () => {
                     type="info"
                     showIcon
                     style={{ marginBottom: 16 }}
-                    message="SPA 已提供最小轮询引擎"
-                    description="邮箱页「开始监听」会按本页 interval/count 调用列表与 extract-verification；以下开关仍写入后端 settings，供持久化与旧前端兼容。"
+                    message="轮询参数使用统一持久化设置"
+                    description="本页与邮箱页使用同一组后端设置。邮箱页开始监听前会先保存改动，页面刷新后不会丢失。"
                   />
                   <Form.Item
                     name="enable_auto_polling"
@@ -450,8 +544,8 @@ const SettingsPage: React.FC = () => {
                   <Form.Item name="polling_interval" label="间隔（秒）">
                     <InputNumber min={1} max={3600} style={{ width: '100%' }} />
                   </Form.Item>
-                  <Form.Item name="polling_count" label="次数">
-                    <InputNumber min={1} max={100} style={{ width: '100%' }} />
+                  <Form.Item name="polling_count" label="最大次数（0 = 不限）">
+                    <InputNumber min={0} max={999} style={{ width: '100%' }} />
                   </Form.Item>
                 </ProCard>
               ),
@@ -489,7 +583,10 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="webhook_notification_url" label="Webhook URL">
+                  <Form.Item
+                    name="webhook_notification_url"
+                    label="Webhook URL"
+                  >
                     <Input />
                   </Form.Item>
                   <Form.Item
@@ -522,14 +619,23 @@ const SettingsPage: React.FC = () => {
                   <Form.Item name="telegram_chat_id" label="Chat ID">
                     <Input />
                   </Form.Item>
-                  <Form.Item name="telegram_poll_interval" label="轮询间隔（秒）">
-                    <InputNumber min={10} max={86400} style={{ width: '100%' }} />
+                  <Form.Item
+                    name="telegram_poll_interval"
+                    label="轮询间隔（秒）"
+                  >
+                    <InputNumber
+                      min={10}
+                      max={86400}
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
                   <Form.Item name="telegram_proxy_url" label="代理 URL">
                     <Input />
                   </Form.Item>
                   <Button
-                    onClick={() => void runTest(testTelegram, 'Telegram 测试成功')}
+                    onClick={() =>
+                      void runTest(testTelegram, 'Telegram 测试成功')
+                    }
                   >
                     测试 Telegram
                   </Button>
@@ -570,7 +676,10 @@ const SettingsPage: React.FC = () => {
                   </Form.Item>
                   <Button
                     onClick={() =>
-                      void runTest(() => testVerificationAi({}), 'AI 连通性正常')
+                      void runTest(
+                        () => testVerificationAi({}),
+                        'AI 连通性正常',
+                      )
                     }
                   >
                     测试 AI
@@ -594,7 +703,11 @@ const SettingsPage: React.FC = () => {
                     name="external_api_rate_limit_per_minute"
                     label="每分钟限流"
                   >
-                    <InputNumber min={1} max={10000} style={{ width: '100%' }} />
+                    <InputNumber
+                      min={1}
+                      max={10000}
+                      style={{ width: '100%' }}
+                    />
                   </Form.Item>
                   <Form.Item
                     name="external_api_key"
@@ -614,8 +727,12 @@ const SettingsPage: React.FC = () => {
                   <Typography.Title level={5}>
                     多 Key（external_api_keys）
                   </Typography.Title>
-                  <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-                    保留脱敏 api_key 表示不修改；新建必须填明文 Key；保存时若未改动则不提交本字段。
+                  <Typography.Paragraph
+                    type="secondary"
+                    style={{ marginTop: 0 }}
+                  >
+                    保留脱敏 api_key 表示不修改；新建必须填明文
+                    Key；保存时若未改动则不提交本字段。
                   </Typography.Paragraph>
                   <Table<KeyRow>
                     size="small"
@@ -718,11 +835,12 @@ const SettingsPage: React.FC = () => {
                             danger
                             size="small"
                             icon={<DeleteOutlined />}
-                            onClick={() =>
+                            onClick={() => {
                               setKeyRows((rows) =>
                                 rows.filter((r) => r._localId !== row._localId),
-                              )
-                            }
+                              );
+                              setDirty(true);
+                            }}
                           />
                         ),
                       },
@@ -732,7 +850,7 @@ const SettingsPage: React.FC = () => {
                     type="dashed"
                     icon={<PlusOutlined />}
                     style={{ marginBottom: 16 }}
-                    onClick={() =>
+                    onClick={() => {
                       setKeyRows((rows) => [
                         ...rows,
                         {
@@ -743,15 +861,19 @@ const SettingsPage: React.FC = () => {
                           pool_access: false,
                           allowed_emails: [],
                         },
-                      ])
-                    }
+                      ]);
+                      setDirty(true);
+                    }}
                   >
                     添加 Key
                   </Button>
                   <Button
                     danger
                     type="link"
-                    onClick={() => setKeyRows([])}
+                    onClick={() => {
+                      setKeyRows([]);
+                      setDirty(true);
+                    }}
                     disabled={!keyRows.length}
                   >
                     清空全部多 Key
@@ -762,7 +884,10 @@ const SettingsPage: React.FC = () => {
                     label="IP 白名单"
                     extra="每行一个 IP / CIDR；空表示不限制"
                   >
-                    <Input.TextArea rows={4} placeholder="127.0.0.1&#10;10.0.0.0/8" />
+                    <Input.TextArea
+                      rows={4}
+                      placeholder="127.0.0.1&#10;10.0.0.0/8"
+                    />
                   </Form.Item>
 
                   <Typography.Title level={5}>危险端点开关</Typography.Title>
@@ -944,29 +1069,41 @@ const SettingsPage: React.FC = () => {
                   {deployment ? (
                     <Space direction="vertical" style={{ width: '100%' }}>
                       <div>
-                        <Typography.Text type="secondary">镜像：</Typography.Text>{' '}
+                        <Typography.Text type="secondary">
+                          镜像：
+                        </Typography.Text>{' '}
                         {String(deployment.image || 'unknown')}
                       </div>
                       <div>
-                        <Typography.Text type="secondary">可自动更新：</Typography.Text>{' '}
+                        <Typography.Text type="secondary">
+                          可自动更新：
+                        </Typography.Text>{' '}
                         {deployment.can_auto_update ? (
                           <Tag color="success">是</Tag>
                         ) : (
                           <Tag>否</Tag>
                         )}
-                        <Typography.Text type="secondary" style={{ marginLeft: 12 }}>
+                        <Typography.Text
+                          type="secondary"
+                          style={{ marginLeft: 12 }}
+                        >
                           推荐：
                         </Typography.Text>{' '}
                         {String(deployment.recommended_method || '--')}
                       </div>
                       <div>
-                        <Typography.Text type="secondary">Watchtower：</Typography.Text>{' '}
+                        <Typography.Text type="secondary">
+                          Watchtower：
+                        </Typography.Text>{' '}
                         {deployment.watchtower_reachable == null
                           ? '--'
                           : deployment.watchtower_reachable
                             ? '可达'
                             : '不可达'}
-                        <Typography.Text type="secondary" style={{ marginLeft: 12 }}>
+                        <Typography.Text
+                          type="secondary"
+                          style={{ marginLeft: 12 }}
+                        >
                           Docker API：
                         </Typography.Text>{' '}
                         {deployment.docker_api_available ? '可用' : '不可用'}
@@ -997,6 +1134,46 @@ const SettingsPage: React.FC = () => {
             },
           ]}
         />
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 16,
+            zIndex: 20,
+            marginTop: 16,
+            padding: '12px 16px',
+            border: `1px solid ${token.colorBorderSecondary}`,
+            borderRadius: 8,
+            background: token.colorBgContainer,
+            boxShadow: token.boxShadowSecondary,
+          }}
+        >
+          <Space
+            wrap
+            style={{ width: '100%', justifyContent: 'space-between' }}
+          >
+            <Typography.Text type={dirty ? 'warning' : 'secondary'}>
+              {dirty ? '有未保存更改' : '当前设置已保存'}
+            </Typography.Text>
+            <Space>
+              <Button
+                icon={<UndoOutlined />}
+                disabled={!dirty || saving}
+                onClick={onReload}
+              >
+                放弃更改
+              </Button>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={saving}
+                disabled={!dirty}
+                onClick={() => void onSave()}
+              >
+                保存更改
+              </Button>
+            </Space>
+          </Space>
+        </div>
       </Form>
     </PageContainer>
   );

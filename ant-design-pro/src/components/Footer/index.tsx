@@ -1,8 +1,10 @@
 import { GithubOutlined } from '@ant-design/icons';
 import packageJson from '@root/package.json';
+import { useQuery } from '@tanstack/react-query';
 import { Divider } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
+import { fetchHealth } from '@/services/outlook/settings';
 
 const FALLBACK_REPO = 'https://github.com/ZeroPointSix/outlookEmailPlus';
 
@@ -71,21 +73,23 @@ const useStyles = createStyles(({ token, css }) => ({
 const Footer: React.FC = () => {
   const { styles } = useStyles();
   const year = new Date().getFullYear();
+  const healthQuery = useQuery({
+    queryKey: ['app-health'],
+    queryFn: fetchHealth,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+  });
+  const appVersion = healthQuery.data?.version || '--';
 
   return (
     <div className={styles.footer}>
       <div className={styles.copyright}>Outlook 邮件管理 &copy; {year}</div>
       <div className={styles.meta}>
         <span className={styles.group}>
-          <span className={styles.label}>ver</span>
-          <a
-            className={styles.link}
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {__APP_VERSION__}
-          </a>
+          <span className={styles.label}>app</span>
+          <span title={healthQuery.isError ? '无法读取后端版本' : undefined}>
+            {appVersion}
+          </span>
           {COMMIT_HASH && (
             <a
               className={styles.link}
@@ -96,6 +100,11 @@ const Footer: React.FC = () => {
               {COMMIT_HASH.slice(0, 7)}
             </a>
           )}
+        </span>
+        <Divider orientation="vertical" className={styles.divider} />
+        <span className={styles.group}>
+          <span className={styles.label}>frontend</span>
+          <span>{__APP_VERSION__}</span>
         </span>
         <Divider orientation="vertical" className={styles.divider} />
         <a

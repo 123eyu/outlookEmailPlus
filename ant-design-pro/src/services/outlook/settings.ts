@@ -20,6 +20,30 @@ export async function updateSettings(partial: AppSettings) {
   );
 }
 
+export function normalizePollingSettings(interval: number, maxCount: number) {
+  const parsedInterval = Math.trunc(Number(interval));
+  const parsedMaxCount = Math.trunc(Number(maxCount));
+  return {
+    polling_interval: Number.isFinite(parsedInterval)
+      ? Math.min(3600, Math.max(1, parsedInterval))
+      : 10,
+    polling_count: Number.isFinite(parsedMaxCount)
+      ? Math.min(999, Math.max(0, parsedMaxCount))
+      : 5,
+  };
+}
+
+export async function updatePollingSettings(interval: number, maxCount: number) {
+  return updateSettings(normalizePollingSettings(interval, maxCount));
+}
+
+export async function fetchHealth() {
+  return outlookRequest<{ status?: string; version?: string }>('/healthz', {
+    method: 'GET',
+    skipErrorHandler: true,
+  });
+}
+
 export async function testTelegram() {
   return outlookRequest<{ success: boolean; message?: string; error?: any }>(
     '/api/settings/telegram-test',
