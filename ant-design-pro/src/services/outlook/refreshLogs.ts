@@ -21,7 +21,7 @@ export type RefreshLogsResponse = {
 };
 
 export async function fetchRefreshLogs(params: { limit?: number } = {}) {
-  return outlookRequest<RefreshLogsResponse>('/api/refresh-logs', {
+  return outlookRequest<RefreshLogsResponse>('/api/accounts/refresh-logs', {
     method: 'GET',
     params,
     skipErrorHandler: true,
@@ -29,9 +29,12 @@ export async function fetchRefreshLogs(params: { limit?: number } = {}) {
 }
 
 export async function fetchFailedRefreshLogs(params: { limit?: number } = {}) {
-  return outlookRequest<RefreshLogsResponse>('/api/refresh-logs/failed', {
-    method: 'GET',
-    params,
-    skipErrorHandler: true,
-  });
+  return outlookRequest<RefreshLogsResponse>(
+    '/api/accounts/refresh-logs/failed',
+    {
+      method: 'GET',
+      params,
+      skipErrorHandler: true,
+    },
+  );
 }
