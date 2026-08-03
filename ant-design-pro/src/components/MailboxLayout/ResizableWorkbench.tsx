@@ -9,6 +9,8 @@ import {
   clampWidth,
   createDefaultLayout,
   loadLayoutState,
+  MAX_WIDTHS,
+  MIN_WIDTHS,
   PANEL_LABELS,
   saveLayoutState,
   type MailboxLayoutState,
@@ -255,34 +257,27 @@ const ResizableWorkbench: React.FC<Props> = ({
   };
 
   const resizer = (forPanel: PanelKey) => (
-    <div
-      role="separator"
+    <hr
       aria-orientation="vertical"
       aria-label={`调整${PANEL_LABELS[forPanel]}宽度`}
+      aria-valuemin={MIN_WIDTHS[forPanel]}
+      aria-valuemax={MAX_WIDTHS[forPanel]}
+      aria-valuenow={layout.panels[forPanel].width}
       tabIndex={0}
       data-resizer={forPanel}
       onMouseDown={(e) => onResizerDown(forPanel, e)}
       onKeyDown={(e) => onResizerKey(forPanel, e)}
       style={{
         width: 6,
+        height: 'auto',
+        margin: 0,
         cursor: layout.panels[forPanel].collapsed ? 'default' : 'col-resize',
         background: 'transparent',
-        position: 'relative',
+        border: 0,
+        borderLeft: '2px solid rgba(5,5,5,0.12)',
         alignSelf: 'stretch',
       }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: '20%',
-          bottom: '20%',
-          left: 2,
-          width: 2,
-          borderRadius: 1,
-          background: 'rgba(5,5,5,0.12)',
-        }}
-      />
-    </div>
+    />
   );
 
   return (

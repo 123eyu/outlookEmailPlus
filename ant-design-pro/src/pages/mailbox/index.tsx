@@ -541,9 +541,13 @@ const MailboxPage: React.FC = () => {
   const polling = !!(selectedEmail && isPolling(selectedEmail));
   const pollSnapMap = useMemo(() => {
     const m = new Map<string, PollSnapshot>();
-    allPollSnaps.forEach((s) => m.set(s.email, s));
+    allPollSnaps.forEach((s) => {
+      m.set(s.email, s);
+    });
     // 保证订阅外也能读到最新
-    getPollSnapshots().forEach((s) => m.set(s.email, s));
+    getPollSnapshots().forEach((s) => {
+      m.set(s.email, s);
+    });
     return m;
   }, [allPollSnaps]);
 
@@ -935,7 +939,7 @@ const MailboxPage: React.FC = () => {
   // ── Compact 视图 ──
   const compactView = (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <ProCard size="small" bordered>
+      <ProCard size="small" variant="outlined">
         <Space wrap style={{ width: '100%' }} align="center">
           <Typography.Text type="secondary">分组</Typography.Text>
           <Space wrap>
@@ -971,7 +975,7 @@ const MailboxPage: React.FC = () => {
       </ProCard>
 
       <ProCard
-        bordered
+        variant="outlined"
         title={
           <Space>
             <span>简洁账号列表</span>
@@ -1002,7 +1006,7 @@ const MailboxPage: React.FC = () => {
             </Button>
           </Space>
         }
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         <Spin spinning={accountsQuery.isLoading}>
           {filteredCompactAccounts.length === 0 ? (
@@ -1255,7 +1259,7 @@ const MailboxPage: React.FC = () => {
         </Space>
       }
     >
-      <ProCard size="small" bordered style={{ marginBottom: 12 }}>
+      <ProCard size="small" variant="outlined" style={{ marginBottom: 12 }}>
         <Space wrap align="center">
           <Typography.Text strong>Compact Poll 高级</Typography.Text>
           <Typography.Text type="secondary">间隔(秒)</Typography.Text>

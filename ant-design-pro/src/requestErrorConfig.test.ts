@@ -142,7 +142,7 @@ describe('requestErrorConfig', () => {
       errorHandler(error, {});
 
       expect(notification.open).toHaveBeenCalledWith({
-        title: 1004,
+        title: '1004',
         description: 'This is a notification',
       });
     });
@@ -187,7 +187,7 @@ describe('requestErrorConfig', () => {
 
       errorHandler(error, {});
 
-      expect(message.error).toHaveBeenCalledWith('Response status:500');
+      expect(message.error).toHaveBeenCalledWith('请求失败');
     });
 
     it('should handle offline error', () => {

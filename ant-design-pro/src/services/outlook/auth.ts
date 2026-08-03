@@ -51,7 +51,7 @@ export async function ensureCsrfToken(force = false): Promise<string | null> {
 
   csrfRefreshPromise = (async () => {
     try {
-      const data = await request<{
+      const response = await request<{
         csrf_token?: string | null;
         csrf_disabled?: boolean;
       }>('/api/csrf-token', {
@@ -59,6 +59,7 @@ export async function ensureCsrfToken(force = false): Promise<string | null> {
         skipErrorHandler: true,
         credentials: 'include',
       } as any);
+      const data = (response as any)?.data ?? response;
 
       if (data?.csrf_disabled) {
         csrfTokenCache = null;

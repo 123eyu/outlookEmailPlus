@@ -67,7 +67,7 @@ export const errorConfig: RequestConfig = {
           errorMessage,
           showType: body.need_login
             ? ErrorShowType.REDIRECT
-            : ErrorShowType.ERROR_MESSAGE,
+            : (body.showType ?? ErrorShowType.ERROR_MESSAGE),
           data: body.data,
         };
         throw error;

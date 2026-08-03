@@ -1,8 +1,16 @@
 export default {
   'menu.login': 'Login',
-  'menu.accounts': 'Accounts',
+  'menu.overview': 'Overview',
   'menu.mailbox': 'Mailbox',
+  'menu.accounts': 'Accounts',
   'menu.groups': 'Groups',
+  'menu.tempEmails': 'Temp Emails',
+  'menu.poolAdmin': 'Mail Pool',
+  'menu.plugins': 'Plugins',
+  'menu.refreshLog': 'Refresh Log',
+  'menu.settings': 'Settings',
+  'menu.audit': 'Audit',
+  'menu.tokenTool': 'Token Tool',
   'menu.exception.404': '404',
   'menu.account.logout': 'Logout',
 };
