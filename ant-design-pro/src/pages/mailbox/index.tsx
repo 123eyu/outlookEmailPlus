@@ -20,7 +20,6 @@ import {
   Collapse,
   Empty,
   Input,
-  InputNumber,
   List,
   Popconfirm,
   Segmented,
@@ -66,10 +65,6 @@ import {
 } from '@/services/outlook/pollEngine';
 import {
   normalizePollingSettings,
-  POLLING_COUNT_MAX,
-  POLLING_COUNT_MIN,
-  POLLING_INTERVAL_MAX,
-  POLLING_INTERVAL_MIN,
   pickSettingsError,
   updatePollingSettings,
 } from '@/services/outlook/settings';
@@ -172,8 +167,6 @@ const MailboxPage: React.FC = () => {
   const {
     interval: pollInterval,
     maxCount: pollMaxCount,
-    setInterval: setPollInterval,
-    setMaxCount: setPollMaxCount,
     acceptSettings: acceptPollSettings,
   } = usePollingSettingsDraft(getPollSettings(), loadPollSettingsFromServer);
   const [pollSaving, setPollSaving] = useState(false);
@@ -599,13 +592,6 @@ const MailboxPage: React.FC = () => {
     return m;
   }, [allPollSnaps]);
 
-  const cachedPollSettings = getPollSettings();
-  const pollSettingsDirty =
-    cachedPollSettings.interval !== pollInterval ||
-    cachedPollSettings.maxCount !== pollMaxCount;
-
-  const applyPollAdvanced = () => void persistPollSettings(true);
-
   // ── 左栏：分组 ──
   const groupsPane = (
     <div style={{ padding: 8 }}>
@@ -749,7 +735,6 @@ const MailboxPage: React.FC = () => {
     >
       <div
         style={{
-          borderRight: '1px solid rgba(5,5,5,0.06)',
           minHeight: 0,
           overflow: 'auto',
           display: 'flex',
@@ -759,7 +744,7 @@ const MailboxPage: React.FC = () => {
         <div
           style={{
             padding: '8px 10px',
-            borderBottom: '1px solid rgba(5,5,5,0.06)',
+            borderBottom: '1px solid rgba(5,5,5,0.04)',
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
@@ -768,7 +753,11 @@ const MailboxPage: React.FC = () => {
         >
           <MailOutlined />
           <Typography.Text strong>邮件列表</Typography.Text>
-          {method ? <Tag>{method}</Tag> : null}
+          {method ? (
+            <Tag color="default" variant="outlined">
+              {method}
+            </Tag>
+          ) : null}
           {polling ? <Badge status="processing" text="监听中" /> : null}
           <Select
             size="small"
@@ -982,30 +971,51 @@ const MailboxPage: React.FC = () => {
     </div>
   );
 
+  const filterChipStyle = (active: boolean): React.CSSProperties => ({
+    padding: '2px 10px',
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 13,
+    lineHeight: '22px',
+    background: active ? 'rgba(184, 92, 56, 0.08)' : 'transparent',
+    color: active ? '#B85C38' : 'inherit',
+    border: active
+      ? '1px solid #B85C38'
+      : '1px solid rgba(5, 5, 5, 0.15)',
+  });
+
   // ── Compact 视图 ──
   const compactView = (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <ProCard size="small" variant="outlined">
+      <div style={{ padding: '4px 0' }}>
         <Space wrap style={{ width: '100%' }} align="center">
           <Typography.Text type="secondary">分组</Typography.Text>
           <Space wrap>
-            <Button
-              size="small"
-              type={groupId == null ? 'primary' : 'default'}
+            <span
+              role="button"
+              tabIndex={0}
+              style={filterChipStyle(groupId == null)}
               onClick={() => onGroupChange(undefined)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onGroupChange(undefined);
+              }}
             >
               全部
-            </Button>
+            </span>
             {groups.map((g) => (
-              <Button
+              <span
                 key={g.id}
-                size="small"
-                type={groupId === g.id ? 'primary' : 'default'}
+                role="button"
+                tabIndex={0}
+                style={filterChipStyle(groupId === g.id)}
                 onClick={() => onGroupChange(g.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') onGroupChange(g.id);
+                }}
               >
                 {g.name}
                 {g.account_count != null ? ` (${g.account_count})` : ''}
-              </Button>
+              </span>
             ))}
           </Space>
           <Input.Search
@@ -1018,10 +1028,10 @@ const MailboxPage: React.FC = () => {
             }}
           />
         </Space>
-      </ProCard>
+      </div>
 
       <ProCard
-        variant="outlined"
+        variant="borderless"
         title={
           <Space>
             <span>简洁账号列表</span>
@@ -1141,7 +1151,7 @@ const MailboxPage: React.FC = () => {
                             {isPoll ? (
                               <Badge status="processing" text="监听中" />
                             ) : null}
-                            <Tag>
+                            <Tag color="default" variant="outlined">
                               {(
                                 account.provider ||
                                 account.account_type ||
@@ -1155,6 +1165,7 @@ const MailboxPage: React.FC = () => {
                                   ? 'success'
                                   : 'default'
                               }
+                              variant="outlined"
                             >
                               {account.status || '--'}
                             </Tag>
@@ -1305,44 +1316,6 @@ const MailboxPage: React.FC = () => {
         </Space>
       }
     >
-      <ProCard size="small" variant="outlined" style={{ marginBottom: 12 }}>
-        <Space wrap align="center">
-          <Typography.Text strong>轮询高级设置</Typography.Text>
-          <Typography.Text type="secondary">间隔(秒)</Typography.Text>
-          <InputNumber
-            min={POLLING_INTERVAL_MIN}
-            max={POLLING_INTERVAL_MAX}
-            value={pollInterval}
-            disabled={pollSaving}
-            onChange={(v) => setPollInterval(Number(v) || 10)}
-          />
-          <Typography.Text type="secondary">最大次数(0=不限)</Typography.Text>
-          <InputNumber
-            min={POLLING_COUNT_MIN}
-            max={POLLING_COUNT_MAX}
-            value={pollMaxCount}
-            disabled={pollSaving}
-            onChange={(v) => setPollMaxCount(Number(v) || 0)}
-          />
-          <Tooltip title="写入系统设置；新监听立即使用，运行中的监听需重新开始">
-            <Button
-              size="small"
-              type={pollSettingsDirty ? 'primary' : 'default'}
-              loading={pollSaving}
-              disabled={!pollSettingsDirty}
-              onClick={applyPollAdvanced}
-            >
-              {pollSettingsDirty ? '保存并应用' : '已保存'}
-            </Button>
-          </Tooltip>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            已保存：{cachedPollSettings.interval}s /{' '}
-            {cachedPollSettings.maxCount || '∞'} · 活跃监听{' '}
-            {allPollSnaps.filter((s) => s.status === 'polling').length}
-          </Typography.Text>
-        </Space>
-      </ProCard>
-
       {listError && viewMode === 'standard' ? (
         <Alert
           type="error"

@@ -52,8 +52,13 @@ const GroupsPage: React.FC = () => {
     {
       title: '名称',
       dataIndex: 'name',
+      ellipsis: true,
+      width: 220,
       render: (_, row) => (
-        <Space>
+        <Space
+          size={8}
+          style={{ maxWidth: '100%', minWidth: 0 }}
+        >
           <span
             style={{
               width: 10,
@@ -61,10 +66,17 @@ const GroupsPage: React.FC = () => {
               borderRadius: '50%',
               background: row.color || '#666',
               display: 'inline-block',
+              flexShrink: 0,
             }}
           />
-          <span>{row.name}</span>
-          {Number(row.is_system) === 1 ? <Tag>系统</Tag> : null}
+          <Typography.Text ellipsis={{ tooltip: row.name }}>
+            {row.name}
+          </Typography.Text>
+          {Number(row.is_system) === 1 ? (
+            <Tag color="default" variant="outlined">
+              系统
+            </Tag>
+          ) : null}
         </Space>
       ),
     },

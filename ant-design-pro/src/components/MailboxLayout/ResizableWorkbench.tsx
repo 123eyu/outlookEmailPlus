@@ -179,8 +179,6 @@ const ResizableWorkbench: React.FC<Props> = ({
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          border: '1px solid rgba(5, 5, 5, 0.06)',
-          borderRadius: 8,
           background: 'var(--ant-color-bg-container, #fff)',
           position: 'relative',
         }}
@@ -193,7 +191,7 @@ const ResizableWorkbench: React.FC<Props> = ({
             padding: collapsed ? '8px 0' : '6px 8px',
             borderBottom: collapsed
               ? 'none'
-              : '1px solid rgba(5, 5, 5, 0.06)',
+              : '1px solid rgba(5, 5, 5, 0.04)',
             flexDirection: collapsed ? 'column' : 'row',
             gap: 4,
             minHeight: 36,
@@ -268,13 +266,13 @@ const ResizableWorkbench: React.FC<Props> = ({
       onMouseDown={(e) => onResizerDown(forPanel, e)}
       onKeyDown={(e) => onResizerKey(forPanel, e)}
       style={{
-        width: 6,
+        width: 8,
         height: 'auto',
         margin: 0,
         cursor: layout.panels[forPanel].collapsed ? 'default' : 'col-resize',
         background: 'transparent',
         border: 0,
-        borderLeft: '2px solid rgba(5,5,5,0.12)',
+        borderLeft: '1px solid rgba(5,5,5,0.06)',
         alignSelf: 'stretch',
       }}
     />
@@ -290,6 +288,9 @@ const ResizableWorkbench: React.FC<Props> = ({
         minHeight: 560,
         height: 'calc(100vh - 220px)',
         minWidth: COLLAPSED_W * 3 + 12,
+        border: '1px solid rgba(5, 5, 5, 0.06)',
+        borderRadius: 8,
+        overflow: 'hidden',
       }}
     >
       {renderPanel('groups', groups, 'left')}

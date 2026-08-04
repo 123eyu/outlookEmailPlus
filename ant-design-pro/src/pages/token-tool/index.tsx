@@ -3,6 +3,7 @@ import {
   App,
   Button,
   Checkbox,
+  Collapse,
   Form,
   Input,
   Modal,
@@ -12,6 +13,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
+import TokenToolGuide from './TokenToolGuide';
 import {
   exchangeToken,
   fetchTokenToolAccounts,
@@ -27,6 +29,11 @@ import { useIntl } from '@umijs/max';
 
 const DEFAULT_SCOPE =
   'https://graph.microsoft.com/Mail.Read offline_access openid profile';
+
+const SCOPE_PRESETS = {
+  graph: 'offline_access https://graph.microsoft.com/.default',
+  imap: 'offline_access https://outlook.office.com/IMAP.AccessAsUser.All',
+} as const;
 
 const TokenToolPage: React.FC = () => {
   const { message } = App.useApp();
@@ -215,6 +222,17 @@ const TokenToolPage: React.FC = () => {
       })}
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Collapse
+          defaultActiveKey={['guide']}
+          items={[
+            {
+              key: 'guide',
+              label: 'Azure 应用注册快速指引',
+              children: <TokenToolGuide />,
+            },
+          ]}
+        />
+
         <ProCard title="OAuth 配置" variant="outlined" loading={loading && !authorizeUrl}>
           <Form
             form={configForm}
@@ -234,6 +252,29 @@ const TokenToolPage: React.FC = () => {
             <Form.Item name="scope" label="Scope">
               <Input.TextArea rows={2} />
             </Form.Item>
+            <Space wrap style={{ marginBottom: 16 }}>
+              <Typography.Text type="secondary">预设：</Typography.Text>
+              <Button
+                size="small"
+                onClick={() =>
+                  configForm.setFieldValue('scope', SCOPE_PRESETS.graph)
+                }
+              >
+                Graph 邮件
+              </Button>
+              <Button
+                size="small"
+                onClick={() =>
+                  configForm.setFieldValue('scope', SCOPE_PRESETS.imap)
+                }
+              >
+                IMAP
+              </Button>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>
+              推荐优先使用 Graph 邮件预设（系统默认邮件读取主链路）；如需 IMAP
+              协议请切换至 IMAP 预设。
+            </Typography.Paragraph>
             <Form.Item
               name="prompt_consent"
               valuePropName="checked"
