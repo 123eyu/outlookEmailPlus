@@ -21,6 +21,7 @@ import {
   Empty,
   Input,
   List,
+  Menu,
   Popconfirm,
   Segmented,
   Select,
@@ -28,9 +29,11 @@ import {
   Spin,
   Switch,
   Tag,
+  theme,
   Tooltip,
   Typography,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
 import { usePollingSettingsDraft } from '@/hooks/usePollingSettingsDraft';
@@ -128,6 +131,7 @@ function syncMailboxUrl(opts: {
 
 const MailboxPage: React.FC = () => {
   const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
   const intl = useIntl();
   const query = useMailboxQuery();
   const { initialState } = useModel('@@initialState');
@@ -179,6 +183,8 @@ const MailboxPage: React.FC = () => {
   const groupsQuery = useQuery({
     queryKey: ['mailbox-groups'],
     queryFn: fetchGroups,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const accountsQuery = useQuery({
@@ -191,6 +197,8 @@ const MailboxPage: React.FC = () => {
         sort_by: 'refresh_time',
         sort_order: 'asc',
       }),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const groups = useMemo(
@@ -592,133 +600,105 @@ const MailboxPage: React.FC = () => {
     return m;
   }, [allPollSnaps]);
 
+  const groupMenuItems = useMemo<MenuProps['items']>(
+    () => [
+      { key: 'all', label: '全部分组' },
+      ...groups.map((g) => ({
+        key: String(g.id),
+        icon: (
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: g.color || token.colorTextQuaternary,
+              display: 'inline-block',
+            }}
+          />
+        ),
+        label: (
+          <div style={{ lineHeight: 1.35, minWidth: 0 }}>
+            <Typography.Text ellipsis>{g.name}</Typography.Text>
+            <div>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {g.account_count != null
+                  ? `${g.account_count} 个账号`
+                  : g.description || ''}
+              </Typography.Text>
+            </div>
+          </div>
+        ),
+      })),
+    ],
+    [groups, token.colorTextQuaternary],
+  );
+
+  const accountMenuItems = useMemo<MenuProps['items']>(
+    () =>
+      filteredCompactAccounts.map((a: AccountItem) => ({
+        key: a.email,
+        label: (
+          <Space size={4} style={{ width: '100%' }}>
+            <Typography.Text ellipsis style={{ maxWidth: 170 }}>
+              {a.email}
+            </Typography.Text>
+            {isPolling(a.email) ? (
+              <Badge status="processing" title="监听中" />
+            ) : null}
+          </Space>
+        ),
+      })),
+    [filteredCompactAccounts],
+  );
+
   // ── 左栏：分组 ──
   const groupsPane = (
-    <div style={{ padding: 8 }}>
-      <List
-        size="small"
-        loading={groupsQuery.isLoading}
-        dataSource={[
-          {
-            id: 0,
-            name: '全部分组',
-            account_count: undefined,
-          } as GroupItem,
-          ...groups,
-        ]}
-        locale={{ emptyText: '暂无分组' }}
-        renderItem={(g) => {
-          const active =
-            (g.id === 0 && groupId == null) || (g.id !== 0 && g.id === groupId);
-          return (
-            <List.Item
-              style={{
-                cursor: 'pointer',
-                padding: '8px 10px',
-                borderRadius: 6,
-                background: active ? 'rgba(184, 92, 56, 0.08)' : undefined,
-                borderLeft: active
-                  ? '3px solid #B85C38'
-                  : '3px solid transparent',
-              }}
-              onClick={() => onGroupChange(g.id === 0 ? undefined : g.id)}
-            >
-              <Space direction="vertical" size={0} style={{ width: '100%' }}>
-                <Space size={6}>
-                  {g.id !== 0 ? (
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: g.color || '#999',
-                        display: 'inline-block',
-                      }}
-                    />
-                  ) : null}
-                  <Typography.Text strong={active} ellipsis>
-                    {g.name}
-                  </Typography.Text>
-                </Space>
-                {g.id !== 0 ? (
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {g.account_count != null
-                      ? `${g.account_count} 个账号`
-                      : g.description || ''}
-                  </Typography.Text>
-                ) : null}
-              </Space>
-            </List.Item>
-          );
-        }}
+    <Spin spinning={groupsQuery.isLoading}>
+      <Menu
+        mode="inline"
+        selectable
+        selectedKeys={[groupId == null ? 'all' : String(groupId)]}
+        items={groupMenuItems}
+        onClick={({ key }) =>
+          onGroupChange(key === 'all' ? undefined : Number(key))
+        }
+        style={{ borderInlineEnd: 0, background: 'transparent' }}
       />
-    </div>
+    </Spin>
   );
 
   // ── 中栏：账号 ──
   const accountsPane = (
-    <div style={{ padding: 8 }}>
-      <Input.Search
-        size="small"
-        allowClear
-        placeholder="筛选账号"
-        style={{ marginBottom: 8 }}
-        onSearch={setCompactSearch}
-        onChange={(e) => {
-          if (!e.target.value) setCompactSearch('');
-        }}
-      />
-      <List
-        size="small"
-        loading={accountsQuery.isLoading}
-        dataSource={filteredCompactAccounts}
-        locale={{ emptyText: '当前分组暂无账号' }}
-        renderItem={(a: AccountItem) => {
-          const active = a.email === selectedEmail;
-          const snap = pollSnapMap.get(a.email);
-          const isPoll = isPolling(a.email);
-          return (
-            <List.Item
-              style={{
-                cursor: 'pointer',
-                padding: '8px 10px',
-                borderRadius: 6,
-                background: active ? 'rgba(184, 92, 56, 0.08)' : undefined,
-                borderLeft: active
-                  ? '3px solid #B85C38'
-                  : '3px solid transparent',
-              }}
-              onClick={() => onAccountChange(a.email)}
-            >
-              <List.Item.Meta
-                title={
-                  <Space size={4}>
-                    <Typography.Text
-                      strong={active}
-                      ellipsis
-                      style={{ maxWidth: 160 }}
-                    >
-                      {a.email}
-                    </Typography.Text>
-                    {isPoll ? (
-                      <Badge status="processing" title="监听中" />
-                    ) : null}
-                  </Space>
-                }
-                description={
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {a.status || '--'}
-                    {a.provider || a.account_type
-                      ? ` · ${(a.provider || a.account_type || '').toUpperCase()}`
-                      : ''}
-                    {snap?.verification ? ` · 码:${snap.verification}` : ''}
-                  </Typography.Text>
-                }
-              />
-            </List.Item>
-          );
-        }}
-      />
+    <div>
+      <div style={{ padding: '0 8px 8px' }}>
+        <Input.Search
+          size="small"
+          allowClear
+          placeholder="筛选账号"
+          onSearch={setCompactSearch}
+          onChange={(e) => {
+            if (!e.target.value) setCompactSearch('');
+          }}
+        />
+      </div>
+      <Spin spinning={accountsQuery.isLoading}>
+        {filteredCompactAccounts.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="当前分组暂无账号"
+            style={{ margin: '24px 0' }}
+          />
+        ) : (
+          <Menu
+            mode="inline"
+            selectable
+            selectedKeys={selectedEmail ? [selectedEmail] : []}
+            items={accountMenuItems}
+            onClick={({ key }) => onAccountChange(key)}
+            style={{ borderInlineEnd: 0, background: 'transparent' }}
+          />
+        )}
+      </Spin>
     </div>
   );
 
@@ -803,12 +783,7 @@ const MailboxPage: React.FC = () => {
                         style={{
                           padding: '10px 12px',
                           cursor: 'pointer',
-                          background: active
-                            ? 'rgba(184, 92, 56, 0.08)'
-                            : undefined,
-                          borderLeft: active
-                            ? '3px solid #B85C38'
-                            : '3px solid transparent',
+                          background: active ? token.colorPrimaryBg : undefined,
                         }}
                         onClick={() => void openDetail(item)}
                         actions={[
@@ -971,64 +946,41 @@ const MailboxPage: React.FC = () => {
     </div>
   );
 
-  const filterChipStyle = (active: boolean): React.CSSProperties => ({
-    padding: '2px 10px',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontSize: 13,
-    lineHeight: '22px',
-    background: active ? 'rgba(184, 92, 56, 0.08)' : 'transparent',
-    color: active ? '#B85C38' : 'inherit',
-    border: active
-      ? '1px solid #B85C38'
-      : '1px solid rgba(5, 5, 5, 0.15)',
-  });
+  const compactGroupOptions = useMemo(
+    () => [
+      { label: '全部', value: 'all' },
+      ...groups.map((g) => ({
+        label:
+          g.account_count != null ? `${g.name} (${g.account_count})` : g.name,
+        value: String(g.id),
+      })),
+    ],
+    [groups],
+  );
 
   // ── Compact 视图 ──
   const compactView = (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <div style={{ padding: '4px 0' }}>
-        <Space wrap style={{ width: '100%' }} align="center">
-          <Typography.Text type="secondary">分组</Typography.Text>
-          <Space wrap>
-            <span
-              role="button"
-              tabIndex={0}
-              style={filterChipStyle(groupId == null)}
-              onClick={() => onGroupChange(undefined)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') onGroupChange(undefined);
-              }}
-            >
-              全部
-            </span>
-            {groups.map((g) => (
-              <span
-                key={g.id}
-                role="button"
-                tabIndex={0}
-                style={filterChipStyle(groupId === g.id)}
-                onClick={() => onGroupChange(g.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') onGroupChange(g.id);
-                }}
-              >
-                {g.name}
-                {g.account_count != null ? ` (${g.account_count})` : ''}
-              </span>
-            ))}
-          </Space>
-          <Input.Search
-            allowClear
-            placeholder="搜索账号"
-            style={{ width: 220, marginLeft: 'auto' }}
-            onSearch={setCompactSearch}
-            onChange={(e) => {
-              if (!e.target.value) setCompactSearch('');
-            }}
-          />
-        </Space>
-      </div>
+      <Space wrap style={{ width: '100%' }} align="center">
+        <Typography.Text type="secondary">分组</Typography.Text>
+        <Segmented
+          size="small"
+          value={groupId == null ? 'all' : String(groupId)}
+          options={compactGroupOptions}
+          onChange={(value) =>
+            onGroupChange(value === 'all' ? undefined : Number(value))
+          }
+        />
+        <Input.Search
+          allowClear
+          placeholder="搜索账号"
+          style={{ width: 220, marginLeft: 'auto' }}
+          onSearch={setCompactSearch}
+          onChange={(e) => {
+            if (!e.target.value) setCompactSearch('');
+          }}
+        />
+      </Space>
 
       <ProCard
         variant="borderless"
@@ -1080,9 +1032,7 @@ const MailboxPage: React.FC = () => {
                   <List.Item
                     style={{
                       padding: '12px 16px',
-                      background: checked
-                        ? 'rgba(184, 92, 56, 0.04)'
-                        : undefined,
+                      background: checked ? token.colorPrimaryBg : undefined,
                     }}
                     actions={[
                       <Button

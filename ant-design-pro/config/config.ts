@@ -165,7 +165,16 @@ export default defineConfig({
    * @description 使用 react-query 管理服务端状态
    * @doc https://umijs.org/docs/max/react-query
    */
-  reactQuery: {},
+  reactQuery: {
+    queryClient: {
+      defaultOptions: {
+        queries: {
+          refetchOnWindowFocus: false,
+          retry: 1,
+        },
+      },
+    },
+  },
   /**
    * @name 权限插件
    * @description 基于 initialState 的权限插件，必须先打开 initialState
