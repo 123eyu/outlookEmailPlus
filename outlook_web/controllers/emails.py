@@ -584,11 +584,7 @@ def api_get_emails(email_addr: str) -> Any:
         all_errors["graph"] = graph_error
 
         # 仅分组明确配置代理时，代理/连接异常才应跳过 IMAP 回退。
-        if (
-            proxy_url
-            and isinstance(graph_error, dict)
-            and graph_error.get("type") in ("ProxyError", "ConnectionError")
-        ):
+        if proxy_url and isinstance(graph_error, dict) and graph_error.get("type") in ("ProxyError", "ConnectionError"):
             return build_error_response(
                 "EMAIL_PROXY_CONNECTION_FAILED",
                 "代理连接失败，请检查分组代理设置",
