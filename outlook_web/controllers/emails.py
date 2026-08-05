@@ -583,10 +583,11 @@ def api_get_emails(email_addr: str) -> Any:
         graph_error = graph_result.get("error")
         all_errors["graph"] = graph_error
 
-        # 如果是代理错误，不再回退 IMAP
-        if isinstance(graph_error, dict) and graph_error.get("type") in (
-            "ProxyError",
-            "ConnectionError",
+        # 仅分组明确配置代理时，代理/连接异常才应跳过 IMAP 回退。
+        if (
+            proxy_url
+            and isinstance(graph_error, dict)
+            and graph_error.get("type") in ("ProxyError", "ConnectionError")
         ):
             return build_error_response(
                 "EMAIL_PROXY_CONNECTION_FAILED",
