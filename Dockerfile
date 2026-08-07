@@ -5,7 +5,7 @@ WORKDIR /frontend
 
 COPY ant-design-pro/package.json ant-design-pro/package-lock.json ./
 ENV HUSKY=0 CI=true
-RUN npm install --no-audit --no-fund --ignore-scripts
+RUN npm install --no-audit --no-fund
 
 COPY ant-design-pro/ ./
 ENV NODE_ENV=production
