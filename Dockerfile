@@ -3,13 +3,9 @@
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /frontend
 
-COPY ant-design-pro/package.json ant-design-pro/package-lock.json ./
-ENV HUSKY=0 CI=true
-RUN npm install --no-audit --no-fund
-
 COPY ant-design-pro/ ./
-ENV NODE_ENV=production
-RUN npm run build
+ENV HUSKY=0 CI=true NODE_ENV=production
+RUN npm install --no-audit --no-fund && npm run build
 
 FROM python:3.11-slim
 
