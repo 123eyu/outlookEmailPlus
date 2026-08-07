@@ -4,7 +4,8 @@ FROM node:22-bookworm-slim AS frontend
 WORKDIR /frontend
 
 COPY ant-design-pro/package.json ant-design-pro/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+ENV HUSKY=0 CI=true
+RUN npm install --no-audit --no-fund --ignore-scripts
 
 COPY ant-design-pro/ ./
 ENV NODE_ENV=production
