@@ -5,6 +5,7 @@ from typing import Any
 
 from flask import g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
+from outlook_web import spa as spa_support
 from outlook_web.errors import build_error_payload
 from outlook_web.repositories import settings as settings_repo
 from outlook_web.security.auth import (
@@ -98,7 +99,9 @@ def login() -> Any:
             )
             return jsonify({"success": False, "error": error_payload}), 500
 
-    # GET 请求返回登录页面
+    # GET 请求返回登录页面（SPA 模式下由前端路由处理）
+    if spa_support.spa_enabled():
+        return spa_support.send_spa_index()
     return render_template("login.html")
 
 
@@ -179,6 +182,8 @@ def favicon() -> Any:
 @login_required
 def index() -> Any:
     """主页"""
+    if spa_support.spa_enabled():
+        return spa_support.send_spa_index()
     return render_template("index.html")
 
 
