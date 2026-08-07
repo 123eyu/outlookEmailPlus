@@ -4,8 +4,10 @@ FROM node:22-bookworm-slim AS frontend
 WORKDIR /frontend
 
 COPY ant-design-pro/ ./
-ENV HUSKY=0 CI=true NODE_ENV=production
-RUN npm install --no-audit --no-fund && npm run build
+ENV HUSKY=0 CI=true
+RUN npm install --no-audit --no-fund --include=dev
+ENV NODE_ENV=production
+RUN npm run build
 
 FROM python:3.11-slim
 
