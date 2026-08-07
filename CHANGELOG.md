@@ -4,6 +4,15 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.9.6] - 2026-08-07
+
+### 修复 / Bug Fixes
+
+- **ZER-381 部署环境 logo/favicon 404**：Docker 镜像按 `.dockerignore` 排除了仓库 `img/` 目录，而 Flask `/img/<path>` 与 `/favicon.ico` 路由只从该目录取文件，导致新前端 logo、头像与 favicon 在部署环境全部 404。现在仓库文件缺失时回退到 SPA 构建产物（`ant-design-pro/public/img/`），两种运行环境均可加载。
+- **ZER-381 邮箱页账号栏信息不全且无法复制**：账号从截断的 Menu 项改为对齐旧前端的账号卡片——完整邮箱地址（截断改为完整展示，点击文本或复制图标即复制）、provider/状态/标签、备注、最近刷新时间，并恢复每账号快捷操作（验证码 / 复制 / 监听）。
+- **ZER-381 简洁模式竖排错乱**：简洁模式账号列表从竖排 List 改为横向长条表格（选择 / 邮箱(点击复制) / 验证码 / 最新邮件 / 分组标签 / 操作），对齐旧前端 `mail-row` 六列栅格；验证码按钮优先复用账号摘要码，无摘要码时兜底实时提取。
+- **ZER-381 邮件详情验证码区布局**：工具栏顺序对齐旧前端（提取并复制验证码主按钮 → 再次复制 → 信任原始 HTML），不再把信任开关放在最前。
+
 ## [v2.9.5] - 2026-08-05
 
 ### 修复 / Bug Fixes

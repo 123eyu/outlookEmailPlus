@@ -11,6 +11,7 @@ import {
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import { useQuery } from '@tanstack/react-query';
 import { history, useIntl, useLocation, useModel } from '@umijs/max';
+import type { MenuProps, TableProps } from 'antd';
 import {
   Alert,
   App,
@@ -28,12 +29,12 @@ import {
   Space,
   Spin,
   Switch,
+  Table,
   Tag,
-  theme,
   Tooltip,
   Typography,
+  theme,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
 import { usePollingSettingsDraft } from '@/hooks/usePollingSettingsDraft';
@@ -629,23 +630,54 @@ const MailboxPage: React.FC = () => {
     [groups, token.colorTextQuaternary],
   );
 
-  const accountMenuItems = useMemo<MenuProps['items']>(
-    () =>
-      filteredCompactAccounts.map((a: AccountItem) => ({
-        key: a.email,
-        label: (
-          <Space size={4} style={{ width: '100%' }}>
-            <Typography.Text ellipsis style={{ maxWidth: 170 }}>
-              {a.email}
-            </Typography.Text>
-            {isPolling(a.email) ? (
-              <Badge status="processing" title="监听中" />
-            ) : null}
-          </Space>
-        ),
-      })),
-    [filteredCompactAccounts],
-  );
+  // 复制邮箱地址（对齐旧前端 copyEmail：点击即复制）
+  const copyAccountEmail = async (email: string) => {
+    if (!email) return;
+    const ok = await copyText(email);
+    if (ok) {
+      message.success('邮箱地址已复制');
+    } else {
+      message.error('复制失败，请手动复制');
+    }
+  };
+
+  const renderAccountTags = (account: AccountItem) => {
+    const providerText = (
+      account.provider ||
+      account.account_type ||
+      'outlook'
+    ).toUpperCase();
+    const isActive =
+      String(account.status || '').toLowerCase() === 'active' ||
+      !account.status;
+    const isFailed =
+      String(account.last_refresh_status || '').toLowerCase() === 'failed';
+    const userTags = (account.tags || [])
+      .map((t) => (typeof t === 'string' ? t : t?.name))
+      .filter(Boolean) as string[];
+    return (
+      <Space size={4} wrap>
+        <Tag color="default" variant="outlined" style={{ marginInlineEnd: 0 }}>
+          {providerText}
+        </Tag>
+        <Tag
+          color={isFailed ? 'error' : isActive ? 'success' : 'default'}
+          variant="outlined"
+          style={{ marginInlineEnd: 0 }}
+        >
+          {isFailed ? '刷新失败' : account.status || 'active'}
+        </Tag>
+        {isPolling(account.email) ? (
+          <Badge status="processing" text="监听中" />
+        ) : null}
+        {userTags.map((name) => (
+          <Tag key={name} style={{ marginInlineEnd: 0 }}>
+            {name}
+          </Tag>
+        ))}
+      </Space>
+    );
+  };
 
   // ── 左栏：分组 ──
   const groupsPane = (
@@ -663,7 +695,7 @@ const MailboxPage: React.FC = () => {
     </Spin>
   );
 
-  // ── 中栏：账号 ──
+  // ── 中栏：账号（对齐旧前端账号卡片：完整邮箱可点击复制 + 快捷操作）──
   const accountsPane = (
     <div>
       <div style={{ padding: '0 8px 8px' }}>
@@ -685,14 +717,119 @@ const MailboxPage: React.FC = () => {
             style={{ margin: '24px 0' }}
           />
         ) : (
-          <Menu
-            mode="inline"
-            selectable
-            selectedKeys={selectedEmail ? [selectedEmail] : []}
-            items={accountMenuItems}
-            onClick={({ key }) => onAccountChange(key)}
-            style={{ borderInlineEnd: 0, background: 'transparent' }}
-          />
+          <div style={{ padding: '0 4px 4px' }}>
+            {filteredCompactAccounts.map((account: AccountItem) => {
+              const active = selectedEmail === account.email;
+              const poll = isPolling(account.email);
+              const snap = pollSnapMap.get(account.email);
+              const extractingThis =
+                extracting && extractingEmail === account.email;
+              return (
+                <div
+                  key={account.id}
+                  onClick={() => onAccountChange(account.email)}
+                  style={{
+                    border: `1px solid ${
+                      active ? token.colorPrimary : token.colorBorderSecondary
+                    }`,
+                    background: active
+                      ? token.colorPrimaryBg
+                      : token.colorBgContainer,
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    margin: '0 4px 8px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Typography.Text
+                    strong
+                    copyable={{
+                      text: account.email,
+                      tooltips: ['点击复制邮箱地址', '已复制'],
+                    }}
+                    style={{
+                      wordBreak: 'break-all',
+                      display: 'block',
+                    }}
+                    onClick={(e) => {
+                      // 点击邮箱文本本身也复制（对齐旧前端），不触发选中
+                      e?.stopPropagation();
+                      void copyAccountEmail(account.email);
+                    }}
+                  >
+                    {account.email}
+                  </Typography.Text>
+                  <div style={{ marginTop: 4 }}>
+                    {renderAccountTags(account)}
+                  </div>
+                  {account.remark ? (
+                    <Typography.Text
+                      type="secondary"
+                      style={{ display: 'block', fontSize: 12, marginTop: 4 }}
+                      ellipsis={{ tooltip: account.remark }}
+                    >
+                      📝 {account.remark}
+                    </Typography.Text>
+                  ) : null}
+                  {snap?.lastMessage ? (
+                    <Typography.Text
+                      type={snap.status === 'found' ? 'success' : 'secondary'}
+                      style={{ display: 'block', fontSize: 12, marginTop: 4 }}
+                    >
+                      {snap.lastMessage}
+                      {snap.verification ? ` · ${snap.verification}` : ''}
+                    </Typography.Text>
+                  ) : null}
+                  <div
+                    style={{
+                      marginTop: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 4,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      🕐{' '}
+                      {account.last_refresh_at
+                        ? formatDate(account.last_refresh_at)
+                        : '从未刷新'}
+                    </Typography.Text>
+                    <Space
+                      size={4}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        size="small"
+                        icon={<KeyOutlined />}
+                        loading={extractingThis}
+                        onClick={() => void extractForEmail(account.email)}
+                      >
+                        验证码
+                      </Button>
+                      <Button
+                        size="small"
+                        icon={<CopyOutlined />}
+                        onClick={() => void copyAccountEmail(account.email)}
+                      >
+                        复制
+                      </Button>
+                      <Button
+                        size="small"
+                        type={poll ? 'primary' : 'default'}
+                        danger={poll}
+                        onClick={() => void onTogglePoll(account.email)}
+                      >
+                        {poll ? '停止' : '监听'}
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Spin>
     </div>
@@ -860,11 +997,8 @@ const MailboxPage: React.FC = () => {
                 {detail.subject || '无主题'}
               </Typography.Title>
               <Space wrap>
-                <Typography.Text type="secondary">
-                  信任原始 HTML
-                </Typography.Text>
-                <Switch checked={trusted} onChange={onToggleTrust} />
                 <Button
+                  type="primary"
                   size="small"
                   icon={<KeyOutlined />}
                   loading={extracting}
@@ -886,6 +1020,10 @@ const MailboxPage: React.FC = () => {
                     再次复制
                   </Button>
                 ) : null}
+                <Typography.Text type="secondary">
+                  信任原始 HTML
+                </Typography.Text>
+                <Switch checked={trusted} onChange={onToggleTrust} />
               </Space>
               {lastVerification ? (
                 <Alert
@@ -954,6 +1092,173 @@ const MailboxPage: React.FC = () => {
     [groups],
   );
 
+  // ── Compact 列（对齐旧前端 mail-row 横向长条：选择|邮箱|验证码|最新邮件|分组标签|操作）──
+  // 不做 useMemo：列内按钮依赖最新 poll/extract 状态，避免闭包捕获旧值
+  const compactColumns: TableProps<AccountItem>['columns'] = [
+    {
+      title: '',
+      key: 'select',
+      width: 44,
+      render: (_: unknown, account: AccountItem) => (
+        <Checkbox
+          checked={compactSelected.includes(account.id)}
+          onChange={(e) => {
+            setCompactSelected((prev) =>
+              e.target.checked
+                ? [...prev, account.id]
+                : prev.filter((id) => id !== account.id),
+            );
+          }}
+        />
+      ),
+    },
+    {
+      title: '邮箱',
+      key: 'email',
+      width: 260,
+      render: (_: unknown, account: AccountItem) => (
+        <Space direction="vertical" size={2}>
+          <Typography.Text
+            strong
+            copyable={{
+              text: account.email,
+              tooltips: ['点击复制邮箱地址', '已复制'],
+            }}
+            style={{ wordBreak: 'break-all' }}
+          >
+            {account.email}
+          </Typography.Text>
+          {renderAccountTags(account)}
+        </Space>
+      ),
+    },
+    {
+      title: '验证码',
+      key: 'code',
+      width: 140,
+      render: (_: unknown, account: AccountItem) => {
+        const snap = pollSnapMap.get(account.email);
+        const code =
+          snap?.verification || account.latest_verification_code || '';
+        const extractingThis = extracting && extractingEmail === account.email;
+        return (
+          <Button
+            size="small"
+            icon={<KeyOutlined />}
+            loading={extractingThis}
+            title={code ? '复制当前摘要验证码' : '无摘要码时兜底提取验证码'}
+            onClick={() => {
+              if (code) {
+                void copyText(code).then((ok) =>
+                  ok
+                    ? message.success(`已复制: ${code}`)
+                    : message.info(`验证码: ${code}`),
+                );
+              } else {
+                void extractForEmail(account.email);
+              }
+            }}
+          >
+            {code || '提取'}
+          </Button>
+        );
+      },
+    },
+    {
+      title: '最新邮件',
+      key: 'latest',
+      render: (_: unknown, account: AccountItem) => {
+        const subject = account.latest_email_subject || '暂无邮件';
+        const meta = [
+          account.latest_email_from,
+          account.latest_email_folder,
+          account.latest_email_received_at
+            ? formatDate(account.latest_email_received_at)
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          <Space direction="vertical" size={0} style={{ maxWidth: 320 }}>
+            <Typography.Text ellipsis={{ tooltip: subject }}>
+              {subject}
+            </Typography.Text>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 12 }}
+              ellipsis={{ tooltip: meta }}
+            >
+              {meta || '暂无邮件摘要'}
+            </Typography.Text>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '分组 / 标签',
+      key: 'group',
+      width: 180,
+      render: (_: unknown, account: AccountItem) => {
+        const userTags = (account.tags || [])
+          .map((t) => (typeof t === 'string' ? t : t?.name))
+          .filter(Boolean) as string[];
+        return (
+          <Space size={4} wrap>
+            <Tag style={{ marginInlineEnd: 0 }}>
+              {account.group_name || '--'}
+            </Tag>
+            {userTags.map((name) => (
+              <Tag key={name} color="blue" style={{ marginInlineEnd: 0 }}>
+                {name}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 210,
+      render: (_: unknown, account: AccountItem) => {
+        const snap = pollSnapMap.get(account.email);
+        const isPoll = isPolling(account.email);
+        const pulling = !!pullingEmails[account.email];
+        return (
+          <Space size={4} wrap>
+            <Button
+              size="small"
+              loading={pulling}
+              onClick={() => void pullAccountSummary(account)}
+            >
+              拉取
+            </Button>
+            <Button
+              size="small"
+              type={isPoll ? 'primary' : 'default'}
+              danger={isPoll}
+              onClick={() => void onTogglePoll(account.email)}
+            >
+              {isPoll
+                ? `停止 ${snap?.remaining != null ? snap.remaining : ''}`.trim()
+                : '监听'}
+            </Button>
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                onAccountChange(account.email);
+                onViewModeChange('standard');
+              }}
+            >
+              打开
+            </Button>
+          </Space>
+        );
+      },
+    },
+  ];
+
   // ── Compact 视图 ──
   const compactView = (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -1016,142 +1321,18 @@ const MailboxPage: React.FC = () => {
           {filteredCompactAccounts.length === 0 ? (
             <Empty style={{ margin: 48 }} description="当前分组暂无账号" />
           ) : (
-            <List
+            <Table<AccountItem>
+              size="small"
               dataSource={filteredCompactAccounts}
+              columns={compactColumns}
               rowKey={(a) => a.id}
-              renderItem={(account) => {
-                const snap = pollSnapMap.get(account.email);
-                const isPoll = isPolling(account.email);
-                const checked = compactSelected.includes(account.id);
-                const pulling = !!pullingEmails[account.email];
-                return (
-                  <List.Item
-                    style={{
-                      padding: '12px 16px',
-                      background: checked ? token.colorPrimaryBg : undefined,
-                    }}
-                    actions={[
-                      <Button
-                        key="code"
-                        size="small"
-                        icon={<KeyOutlined />}
-                        loading={
-                          extracting && extractingEmail === account.email
-                        }
-                        onClick={() => void extractForEmail(account.email)}
-                      >
-                        {snap?.verification || '验证码'}
-                      </Button>,
-                      <Button
-                        key="pull"
-                        size="small"
-                        loading={pulling}
-                        onClick={() => void pullAccountSummary(account)}
-                      >
-                        拉取
-                      </Button>,
-                      <Button
-                        key="poll"
-                        size="small"
-                        type={isPoll ? 'primary' : 'default'}
-                        danger={isPoll}
-                        onClick={() => void onTogglePoll(account.email)}
-                      >
-                        {isPoll
-                          ? `停止 ${snap?.remaining != null ? snap.remaining : ''}`.trim()
-                          : '监听'}
-                      </Button>,
-                      <Button
-                        key="open"
-                        size="small"
-                        type="link"
-                        onClick={() => {
-                          onAccountChange(account.email);
-                          onViewModeChange('standard');
-                        }}
-                      >
-                        打开
-                      </Button>,
-                    ]}
-                  >
-                    <Space align="start">
-                      <Checkbox
-                        checked={checked}
-                        onChange={(e) => {
-                          setCompactSelected((prev) =>
-                            e.target.checked
-                              ? [...prev, account.id]
-                              : prev.filter((id) => id !== account.id),
-                          );
-                        }}
-                      />
-                      <List.Item.Meta
-                        title={
-                          <Space>
-                            <Typography.Text
-                              copyable={{ text: account.email }}
-                              strong
-                            >
-                              {account.email}
-                            </Typography.Text>
-                            {isPoll ? (
-                              <Badge status="processing" text="监听中" />
-                            ) : null}
-                            <Tag color="default" variant="outlined">
-                              {(
-                                account.provider ||
-                                account.account_type ||
-                                'outlook'
-                              ).toUpperCase()}
-                            </Tag>
-                            <Tag
-                              color={
-                                String(account.status || '').toLowerCase() ===
-                                'active'
-                                  ? 'success'
-                                  : 'default'
-                              }
-                              variant="outlined"
-                            >
-                              {account.status || '--'}
-                            </Tag>
-                          </Space>
-                        }
-                        description={
-                          <Space direction="vertical" size={0}>
-                            <Typography.Text type="secondary">
-                              分组：{account.group_name || '--'}
-                              {account.remark ? ` · ${account.remark}` : ''}
-                            </Typography.Text>
-                            {snap?.lastMessage ? (
-                              <Typography.Text
-                                type={
-                                  snap.status === 'found'
-                                    ? 'success'
-                                    : 'secondary'
-                                }
-                                style={{ fontSize: 12 }}
-                              >
-                                {snap.lastMessage}
-                                {snap.verification
-                                  ? ` · ${snap.verification}`
-                                  : ''}
-                              </Typography.Text>
-                            ) : (
-                              <Typography.Text
-                                type="secondary"
-                                style={{ fontSize: 12 }}
-                              >
-                                最近刷新：{account.last_refresh_at || '--'}
-                              </Typography.Text>
-                            )}
-                          </Space>
-                        }
-                      />
-                    </Space>
-                  </List.Item>
-                );
-              }}
+              pagination={false}
+              scroll={{ x: 960 }}
+              rowClassName={(account) =>
+                compactSelected.includes(account.id)
+                  ? 'mailbox-compact-row-selected'
+                  : ''
+              }
             />
           )}
         </Spin>
