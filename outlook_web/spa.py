@@ -35,3 +35,16 @@ def send_spa_asset(path: str) -> Response:
     if safe_path and (dist / safe_path).is_file():
         return send_from_directory(str(dist), safe_path)
     return send_spa_index()
+
+
+def send_spa_file(path: str) -> Response | None:
+    """Serve a built asset only when it exists in the SPA dist directory.
+
+    Unlike send_spa_asset(), this never falls back to the SPA shell,
+    so callers can decide their own fallback (e.g. 404 for images).
+    """
+    dist = spa_dist_dir()
+    safe_path = (path or "").lstrip("/")
+    if safe_path and (dist / safe_path).is_file():
+        return send_from_directory(str(dist), safe_path)
+    return None
