@@ -68,7 +68,11 @@ export default function PerformancePane({
   ];
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space
+      direction="vertical"
+      size={16}
+      style={{ width: '100%', paddingRight: 48, boxSizing: 'border-box' }}
+    >
       <Alert
         type="info"
         showIcon
