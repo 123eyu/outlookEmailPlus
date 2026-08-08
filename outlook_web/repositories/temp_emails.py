@@ -192,11 +192,22 @@ def build_temp_mailbox_descriptor(record: Dict[str, Any]) -> Dict[str, Any]:
 
 def build_temp_mailbox_public_dto(record: Dict[str, Any]) -> Dict[str, Any]:
     descriptor = build_temp_mailbox_descriptor(record)
+    provider_name = descriptor["provider_name"]
+    provider_capabilities = dict((descriptor.get("meta") or {}).get("provider_capabilities") or {})
+    compatibility_mode = (
+        "legacy"
+        if descriptor["source"] == LEGACY_TEMP_MAIL_SOURCE or provider_name == LEGACY_TEMP_MAIL_PROVIDER_NAME
+        else "native"
+    )
     return {
         "email": descriptor["email"],
         "prefix": descriptor["prefix"],
         "domain": descriptor["domain"],
         "source": descriptor["source"],
+        "provider_name": provider_name,
+        "provider_capabilities": provider_capabilities,
+        "compatibility_mode": compatibility_mode,
+        "read_capability": descriptor["read_capability"],
         "mailbox_type": descriptor["mailbox_type"],
         "visible_in_ui": descriptor["visible_in_ui"],
         "status": descriptor["status"],
