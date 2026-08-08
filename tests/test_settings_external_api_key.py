@@ -317,12 +317,8 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
                 expires_at="2000-01-01T00:00:00Z",
             )
 
-            self.assertIsNone(
-                external_api_keys_repo.find_external_api_key_by_plaintext("expired-key")
-            )
-            self.assertFalse(
-                external_api_keys_repo.has_any_external_api_key_configured(enabled_only=True)
-            )
+            self.assertIsNone(external_api_keys_repo.find_external_api_key_by_plaintext("expired-key"))
+            self.assertFalse(external_api_keys_repo.has_any_external_api_key_configured(enabled_only=True))
 
     def test_get_settings_exposes_pool_external_enabled(self):
         with self.app.app_context():

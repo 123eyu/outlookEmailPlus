@@ -413,8 +413,11 @@ def api_create_external_api_key() -> Any:
                 message_en="Expiry must be between 1 and 3650 days, or never",
             )
         expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=expiry_days)
-        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            (datetime.now(timezone.utc) + timedelta(days=expiry_days))
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     raw_allowed_emails = data.get("allowed_emails")
     allowed_emails = _parse_allowed_emails_input(raw_allowed_emails)
