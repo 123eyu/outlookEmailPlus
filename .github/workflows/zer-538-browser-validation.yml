@@ -196,7 +196,8 @@ jobs:
             await page.getByText('插件', { exact: true }).first().waitFor();
             await page.getByText('历史兼容', { exact: true }).waitFor();
 
-            const generateButton = page.getByRole('button', { name: '生成', exact: true });
+            const generateButton = page.locator('button').filter({ hasText: '生成' }).first();
+            await generateButton.waitFor({ state: 'visible' });
             if (mode === 'ready') {
               await page.getByText('已启用', { exact: true }).waitFor();
               assert.equal(await generateButton.isEnabled(), true);
