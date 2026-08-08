@@ -181,9 +181,7 @@ def _grouped_summary(
     return rows[:limit]
 
 
-def _finding(
-    *, layer: str, severity: str, title: str, evidence: str, recommendation: str
-) -> dict[str, str]:
+def _finding(*, layer: str, severity: str, title: str, evidence: str, recommendation: str) -> dict[str, str]:
     return {
         "layer": layer,
         "severity": severity,
