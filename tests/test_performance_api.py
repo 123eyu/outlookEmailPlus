@@ -50,9 +50,7 @@ class PerformanceApiTests(unittest.TestCase):
     def test_client_metrics_endpoint_accepts_valid_batch(self) -> None:
         csrf_response = self.client.get("/api/csrf-token")
         csrf_payload = csrf_response.get_json() or {}
-        token = csrf_payload.get("csrf_token") or (csrf_payload.get("data") or {}).get(
-            "csrf_token"
-        )
+        token = csrf_payload.get("csrf_token") or (csrf_payload.get("data") or {}).get("csrf_token")
         headers = {"X-CSRFToken": token} if token else {}
         response = self.client.post(
             "/api/performance/client",
