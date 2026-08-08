@@ -4,6 +4,13 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.9.6] - 2026-08-08
+
+### 优化 / Improvements
+
+- **ZER-538 临时邮箱与插件兼容展示**：新前端显示当前临时邮箱 Provider、内置与插件来源、可用能力和启用状态；未配置时停用生成操作并提供明确入口。
+- **历史邮箱兼容**：临时邮箱列表接口增加安全的 `provider_name`、`provider_capabilities` 和 `compatibility_mode` 字段，不公开 Provider 凭据；旧 GPTMail 邮箱继续通过 `legacy_bridge` 读取。
+
 ## [v2.9.5] - 2026-08-05
 
 ### 修复 / Bug Fixes
