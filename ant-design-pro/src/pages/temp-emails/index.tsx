@@ -1,10 +1,14 @@
 import {
+  AppstoreOutlined,
   ClearOutlined,
+  CheckCircleOutlined,
   DeleteOutlined,
+  ExclamationCircleOutlined,
   KeyOutlined,
   MailOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +25,7 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -38,7 +43,19 @@ import {
   type TempEmailItem,
   type TempEmailMessage,
 } from '@/services/outlook/tempEmails';
-import { useIntl } from '@umijs/max';
+import {
+  getMailboxProviderPresentation,
+  providerKindLabel,
+  resolveTempMailAvailability,
+} from './utils';
+import { history, useIntl } from '@umijs/max';
+
+const CAPABILITY_LABELS = [
+  ['create_mailbox', '生成邮箱'],
+  ['list_messages', '读取邮件'],
+  ['delete_mailbox', '远端删除'],
+  ['clear_messages', '清空邮件'],
+] as const;
 
 function formatDate(value?: string | number) {
   if (value === undefined || value === null || value === '') return '--';
@@ -82,6 +99,27 @@ const TempEmailsPage: React.FC = () => {
   });
 
   const mailboxes: TempEmailItem[] = listQuery.data?.emails || [];
+  const tempOptions = optionsQuery.data?.options;
+  const providerCatalog = tempOptions?.providers || [];
+  const optionsErrorMessage = pickTempErrorMessage(
+    (optionsQuery.error as any)?.response?.data || optionsQuery.data,
+    '临时邮箱服务当前不可用',
+  );
+  const availability = useMemo(
+    () =>
+      resolveTempMailAvailability(tempOptions, {
+        loading: optionsQuery.isLoading,
+        failed: optionsQuery.isError || optionsQuery.data?.success === false,
+        errorMessage: optionsErrorMessage,
+      }),
+    [
+      optionsErrorMessage,
+      optionsQuery.data?.success,
+      optionsQuery.isError,
+      optionsQuery.isLoading,
+      tempOptions,
+    ],
+  );
 
   const domainOptions = useMemo(() => {
     const domains = optionsQuery.data?.options?.domains || [];
@@ -95,14 +133,24 @@ const TempEmailsPage: React.FC = () => {
   }, [optionsQuery.data]);
 
   const providerOptions = useMemo(() => {
-    const providers = optionsQuery.data?.options?.providers || [];
-    return providers
-      .map((p) => ({
-        label: p.label || p.name || '',
-        value: p.name || '',
-      }))
+    return providerCatalog
+      .map((p) => {
+        const kindSuffix = p.kind === 'plugin' ? ' · 插件' : '';
+        const activeSuffix = p.active ? ' · 当前' : '';
+        return {
+          label: `${p.label || p.name || ''}${kindSuffix}${activeSuffix}`,
+          value: p.name || '',
+        };
+      })
       .filter((p) => p.value);
-  }, [optionsQuery.data]);
+  }, [providerCatalog]);
+
+  useEffect(() => {
+    const resolvedProvider = tempOptions?.provider_name;
+    if (!providerName && resolvedProvider && !form.getFieldValue('provider_name')) {
+      form.setFieldValue('provider_name', resolvedProvider);
+    }
+  }, [form, providerName, tempOptions?.provider_name]);
 
   const reloadList = async () => {
     await queryClient.invalidateQueries({ queryKey: ['temp-emails'] });
@@ -141,6 +189,10 @@ const TempEmailsPage: React.FC = () => {
   }, [selectedEmail]);
 
   const onGenerate = async () => {
+    if (!availability.canGenerate) {
+      message.warning(availability.message);
+      return;
+    }
     const values = await form.validateFields().catch(() => null);
     if (!values) return;
     setGenerating(true);
@@ -287,6 +339,78 @@ const TempEmailsPage: React.FC = () => {
         </Button>
       }
     >
+      <Alert
+        type={
+          availability.state === 'ready'
+            ? 'success'
+            : availability.state === 'loading'
+              ? 'info'
+              : 'warning'
+        }
+        showIcon
+        style={{ marginBottom: 16 }}
+        message={
+          <Space wrap>
+            <Typography.Text strong>临时邮箱服务</Typography.Text>
+            <Tag color={availability.state === 'ready' ? 'success' : 'warning'}>
+              {availability.state === 'ready'
+                ? '已启用'
+                : availability.state === 'loading'
+                  ? '检查中'
+                  : '需配置'}
+            </Tag>
+            {tempOptions?.provider_label || tempOptions?.provider_name ? (
+              <Tag>{tempOptions.provider_label || tempOptions.provider_name}</Tag>
+            ) : null}
+            {tempOptions?.provider_kind ? (
+              <Tag>{providerKindLabel(tempOptions.provider_kind)}</Tag>
+            ) : null}
+          </Space>
+        }
+        description={
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Typography.Text type="secondary">{availability.message}</Typography.Text>
+            {tempOptions?.capabilities ? (
+              <Space wrap size={[4, 4]}>
+                {CAPABILITY_LABELS.map(([key, label]) => {
+                  const supported = tempOptions.capabilities?.[key];
+                  if (supported === undefined) return null;
+                  return (
+                    <Tag
+                      key={key}
+                      color={supported ? 'success' : 'default'}
+                      icon={
+                        supported ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />
+                      }
+                    >
+                      {supported ? label : `不支持${label}`}
+                    </Tag>
+                  );
+                })}
+              </Space>
+            ) : null}
+          </Space>
+        }
+        action={
+          <Space wrap>
+            <Button
+              size="small"
+              icon={<SettingOutlined />}
+              onClick={() => history.push('/settings')}
+            >
+              临时邮箱设置
+            </Button>
+            <Button
+              size="small"
+              icon={<AppstoreOutlined />}
+              onClick={() => history.push('/plugins')}
+            >
+              插件管理
+            </Button>
+          </Space>
+        }
+      />
+
       <ProCard
         title="生成临时邮箱"
         variant="outlined"
@@ -296,6 +420,7 @@ const TempEmailsPage: React.FC = () => {
             type="primary"
             icon={<PlusOutlined />}
             loading={generating}
+            disabled={!availability.canGenerate}
             onClick={() => void onGenerate()}
           >
             生成
@@ -310,7 +435,10 @@ const TempEmailsPage: React.FC = () => {
                 placeholder="默认服务商"
                 style={{ width: 180 }}
                 options={providerOptions}
-                onChange={(v) => setProviderName(v || undefined)}
+                onChange={(v) => {
+                  setProviderName(v || undefined);
+                  form.setFieldValue('domain', undefined);
+                }}
               />
             </Form.Item>
           ) : null}
@@ -339,7 +467,7 @@ const TempEmailsPage: React.FC = () => {
             type="warning"
             showIcon
             style={{ marginTop: 12 }}
-            message={pickTempErrorMessage(optionsQuery.data, '域名配置加载失败')}
+            message={optionsErrorMessage}
           />
         ) : null}
       </ProCard>
@@ -347,7 +475,7 @@ const TempEmailsPage: React.FC = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(260px, 320px) minmax(300px, 380px) 1fr',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
           gap: 16,
           minHeight: 480,
         }}
@@ -366,6 +494,10 @@ const TempEmailsPage: React.FC = () => {
                 rowKey={(item) => item.email}
                 renderItem={(item) => {
                   const active = item.email === selectedEmail;
+                  const providerPresentation = getMailboxProviderPresentation(
+                    item,
+                    providerCatalog,
+                  );
                   return (
                     <List.Item
                       style={{
@@ -378,40 +510,45 @@ const TempEmailsPage: React.FC = () => {
                       }}
                       onClick={() => setSelectedEmail(item.email)}
                       actions={[
-                        <Button
-                          key="code"
-                          type="text"
-                          size="small"
-                          icon={<KeyOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void onExtractCode(item.email);
-                          }}
-                        />,
+                        <Tooltip key="code" title="提取验证码">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<KeyOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void onExtractCode(item.email);
+                            }}
+                          />
+                        </Tooltip>,
                         <Popconfirm
                           key="clear"
                           title="清空该邮箱全部邮件？"
                           onConfirm={() => void onClearMessages(item.email)}
                         >
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<ClearOutlined />}
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                          <Tooltip title="清空邮件">
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<ClearOutlined />}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </Tooltip>
                         </Popconfirm>,
                         <Popconfirm
                           key="del"
                           title="确认删除该临时邮箱？"
                           onConfirm={() => void onDeleteMailbox(item.email)}
                         >
-                          <Button
-                            type="text"
-                            size="small"
-                            danger
-                            icon={<DeleteOutlined />}
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                          <Tooltip title="移除邮箱">
+                            <Button
+                              type="text"
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </Tooltip>
                         </Popconfirm>,
                       ]}
                     >
@@ -422,13 +559,26 @@ const TempEmailsPage: React.FC = () => {
                           </Typography.Text>
                         }
                         description={
-                          <Space size={4}>
-                            <Tag>临时</Tag>
-                            {item.source || item.provider_name ? (
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                {item.source || item.provider_name}
-                              </Typography.Text>
-                            ) : null}
+                          <Space wrap size={[4, 4]}>
+                            <Tag
+                              color={
+                                providerPresentation.kind === 'legacy'
+                                  ? 'warning'
+                                  : providerPresentation.kind === 'plugin'
+                                    ? 'processing'
+                                    : undefined
+                              }
+                            >
+                              {providerKindLabel(providerPresentation.kind)}
+                            </Tag>
+                            <Typography.Text
+                              type="secondary"
+                              ellipsis
+                              title={providerPresentation.label}
+                              style={{ fontSize: 12, maxWidth: 170 }}
+                            >
+                              {providerPresentation.label}
+                            </Typography.Text>
                           </Space>
                         }
                       />
