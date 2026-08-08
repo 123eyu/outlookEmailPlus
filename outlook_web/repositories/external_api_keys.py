@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import json
 import secrets
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from outlook_web.db import get_db
 from outlook_web.security.crypto import decrypt_data, encrypt_data
+
+
+class ExternalApiKeyNameConflictError(RuntimeError):
+    """Raised when the database rejects a duplicate API Key name."""
+
+
+def _execute_key_write(db: sqlite3.Connection, sql: str, params: tuple[Any, ...]) -> sqlite3.Cursor:
+    try:
+        return db.execute(sql, params)
+    except sqlite3.IntegrityError as exc:
+        if "idx_external_api_keys_name_unique" in str(exc):
+            raise ExternalApiKeyNameConflictError("external_api_key_name_conflict") from exc
+        raise
 
 
 def _mask_secret_value(value: str, head: int = 4, tail: int = 4) -> str:
@@ -152,7 +166,8 @@ def create_external_api_key(
     commit: bool = True,
 ) -> dict[str, Any]:
     db = get_db()
-    db.execute(
+    cursor = _execute_key_write(
+        db,
         """
         INSERT INTO external_api_keys (
             name, api_key_encrypted, allowed_emails_json, pool_access,
@@ -171,7 +186,7 @@ def create_external_api_key(
     )
     if commit:
         db.commit()
-    row_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    row_id = cursor.lastrowid
     return get_external_api_key_by_id(row_id) or {}
 
 
@@ -191,7 +206,8 @@ def update_external_api_key(
         return None
 
     db = get_db()
-    db.execute(
+    _execute_key_write(
+        db,
         """
         UPDATE external_api_keys
         SET name = ?,

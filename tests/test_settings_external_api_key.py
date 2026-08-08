@@ -1,4 +1,7 @@
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 from tests._import_app import clear_login_attempts, import_web_app_module
 
@@ -288,6 +291,48 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
             duplicate.get_json().get("error", {}).get("code"),
             "EXTERNAL_API_KEY_NAME_CONFLICT",
         )
+
+    def test_concurrent_create_allows_only_one_case_insensitive_name(self):
+        clients = [self.app.test_client(), self.app.test_client()]
+        for client in clients:
+            self._login(client)
+
+        with self.app.app_context():
+            from outlook_web.repositories import external_api_keys as external_api_keys_repo
+
+            original_list = external_api_keys_repo.list_external_api_keys
+
+        barrier = threading.Barrier(2)
+
+        def synchronized_list(*args, **kwargs):
+            result = original_list(*args, **kwargs)
+            barrier.wait(timeout=5)
+            return result
+
+        def create_key(client, name):
+            return client.post(
+                "/api/settings/external-api-keys",
+                json={"name": name, "expires_in_days": 7},
+            )
+
+        with patch.object(external_api_keys_repo, "list_external_api_keys", side_effect=synchronized_list):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [
+                    executor.submit(create_key, clients[0], "Concurrent Key"),
+                    executor.submit(create_key, clients[1], "concurrent key"),
+                ]
+                responses = [future.result(timeout=10) for future in futures]
+
+        self.assertEqual(sorted(response.status_code for response in responses), [201, 409])
+        conflict = next(response for response in responses if response.status_code == 409)
+        self.assertEqual(
+            conflict.get_json().get("error", {}).get("code"),
+            "EXTERNAL_API_KEY_NAME_CONFLICT",
+        )
+
+        settings_resp = clients[0].get("/api/settings")
+        keys = settings_resp.get_json().get("settings", {}).get("external_api_keys", [])
+        self.assertEqual(len(keys), 1)
 
     def test_post_external_api_key_rejects_invalid_email_scope(self):
         client = self.app.test_client()

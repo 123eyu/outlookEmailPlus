@@ -187,6 +187,15 @@ def _json_error(
     return jsonify(body), (http_status if http_status is not None else status)
 
 
+def _external_api_key_name_conflict_response():
+    return _json_error(
+        "EXTERNAL_API_KEY_NAME_CONFLICT",
+        "已存在同名 API Key",
+        status=409,
+        message_en="An API key with this name already exists",
+    )
+
+
 def _ensure_email_service_available() -> None:
     from outlook_web.services import email_push
 
@@ -391,12 +400,7 @@ def api_create_external_api_key() -> Any:
         for item in external_api_keys_repo.list_external_api_keys(include_disabled=True)
     }
     if name.lower() in existing_names:
-        return _json_error(
-            "EXTERNAL_API_KEY_NAME_CONFLICT",
-            "已存在同名 API Key",
-            status=409,
-            message_en="An API key with this name already exists",
-        )
+        return _external_api_key_name_conflict_response()
 
     expires_at = None
     raw_expiry_days = data.get("expires_in_days")
@@ -432,14 +436,21 @@ def api_create_external_api_key() -> Any:
         )
 
     api_key = f"oep_{secrets.token_urlsafe(32)}"
-    item = external_api_keys_repo.create_external_api_key(
-        name=name,
-        api_key=api_key,
-        allowed_emails=allowed_emails,
-        pool_access=_parse_bool_input(data.get("pool_access"), default=False),
-        enabled=_parse_bool_input(data.get("enabled"), default=True),
-        expires_at=expires_at,
-    )
+    try:
+        item = external_api_keys_repo.create_external_api_key(
+            name=name,
+            api_key=api_key,
+            allowed_emails=allowed_emails,
+            pool_access=_parse_bool_input(data.get("pool_access"), default=False),
+            enabled=_parse_bool_input(data.get("enabled"), default=True),
+            expires_at=expires_at,
+        )
+    except external_api_keys_repo.ExternalApiKeyNameConflictError:
+        try:
+            get_db().rollback()
+        except Exception:
+            pass
+        return _external_api_key_name_conflict_response()
     log_audit(
         "create_external_api_key",
         "settings",
@@ -1205,6 +1216,12 @@ def api_update_settings() -> Any:
                 if result is False:
                     raise RuntimeError("settings_update_failed")
             db.commit()
+        except external_api_keys_repo.ExternalApiKeyNameConflictError:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return _external_api_key_name_conflict_response()
         except Exception:
             try:
                 db.rollback()
