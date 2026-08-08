@@ -457,10 +457,26 @@ const MailboxPage: React.FC = () => {
     }
   };
 
+  // 对齐旧前端 copyEmail：优先 Clipboard API，失败回退 textarea + execCommand，
+  // 覆盖 HTTP 非安全上下文 / 剪贴板权限被拒的场景（否则复制失败连带自动监听不触发）
   const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      return true;
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return copied;
     } catch {
       return false;
     }
