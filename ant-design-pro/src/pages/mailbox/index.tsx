@@ -169,11 +169,20 @@ const MailboxPage: React.FC = () => {
   const [listSearch, setListSearch] = useState('');
   const [pollSnap, setPollSnap] = useState<PollSnapshot | undefined>();
   const [allPollSnaps, setAllPollSnaps] = useState<PollSnapshot[]>([]);
+  // 后端「自动轮询」总开关（enable_auto_polling），对齐旧前端 pollEnabled
+  const [autoPollEnabled, setAutoPollEnabled] = useState<boolean>(
+    () => getPollSettings().enabled,
+  );
+  const loadPollSettingsWithFlag = useCallback(async () => {
+    const s = await loadPollSettingsFromServer();
+    setAutoPollEnabled(s.enabled);
+    return s;
+  }, []);
   const {
     interval: pollInterval,
     maxCount: pollMaxCount,
     acceptSettings: acceptPollSettings,
-  } = usePollingSettingsDraft(getPollSettings(), loadPollSettingsFromServer);
+  } = usePollingSettingsDraft(getPollSettings(), loadPollSettingsWithFlag);
   const [compactSearch, setCompactSearch] = useState('');
   const [compactSelected, setCompactSelected] = useState<number[]>([]);
   const [pullingEmails, setPullingEmails] = useState<Record<string, boolean>>(
@@ -309,6 +318,46 @@ const MailboxPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmail, folder, viewMode]);
 
+  // 对齐旧前端：开启「自动轮询」后，标准模式选中账号即自动开始监听
+  useEffect(() => {
+    if (!autoPollEnabled || viewMode !== 'standard' || !selectedEmail) return;
+    if (isPolling(selectedEmail)) return;
+    void startPoll(selectedEmail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPollEnabled, viewMode, selectedEmail]);
+
+  // 监听发现新邮件/验证码后：刷新账号摘要与当前邮件列表，避免摘要停留在旧内容
+  const pollStatusRef = React.useRef<Map<string, PollSnapshot['status']>>(
+    new Map(),
+  );
+  const pollInitRef = React.useRef(false);
+  useEffect(() => {
+    const prev = pollStatusRef.current;
+    const next = new Map<string, PollSnapshot['status']>();
+    let foundEmail: string | null = null;
+    let foundCode: string | null = null;
+    allPollSnaps.forEach((s) => {
+      next.set(s.email, s.status);
+      const wasKnown = pollInitRef.current && prev.has(s.email);
+      if (
+        s.status === 'found' &&
+        (!wasKnown || prev.get(s.email) !== 'found')
+      ) {
+        foundEmail = s.email;
+        if (s.verification) foundCode = s.verification;
+      }
+    });
+    pollStatusRef.current = next;
+    pollInitRef.current = true;
+    if (!foundEmail) return;
+    void accountsQuery.refetch();
+    if (foundCode) setLastVerification(foundCode);
+    if (foundEmail === selectedEmail && viewMode === 'standard') {
+      void loadEmails({ append: false, nextSkip: 0 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPollSnaps]);
+
   const filteredEmails = useMemo(() => {
     let list = emails;
     if (readFilter === 'unread') {
@@ -436,6 +485,11 @@ const MailboxPage: React.FC = () => {
         setLastVerification(String(text));
         const ok = await copyText(String(text));
         message.success(ok ? `已复制: ${text}` : `验证码: ${text}`);
+        // 提取成功后同步后端已更新的账号摘要（最新邮件/验证码），避免展示旧内容
+        void accountsQuery.refetch();
+        if (viewMode === 'standard' && email === selectedEmail) {
+          void loadEmails({ append: false, nextSkip: 0 });
+        }
         return;
       }
       message.error(pickEmailsErrorMessage(res, '未找到验证码或链接'));
@@ -636,6 +690,11 @@ const MailboxPage: React.FC = () => {
     const ok = await copyText(email);
     if (ok) {
       message.success('邮箱地址已复制');
+      // 对齐旧前端 email-copied 监听：复制地址通常意味着要去注册，
+      // 开启自动轮询时立即开始监听该账号新邮件（验证码）
+      if (autoPollEnabled && accounts.some((a) => a.email === email)) {
+        void startPoll(email);
+      }
     } else {
       message.error('复制失败，请手动复制');
     }

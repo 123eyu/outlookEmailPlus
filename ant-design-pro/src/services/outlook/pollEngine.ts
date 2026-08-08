@@ -25,6 +25,8 @@ type PollState = {
   errorCount: number;
   pollCount: number;
   isPolling: boolean;
+  /** 停止后置为 false；entry 保留为「幽灵快照」供 UI 展示最终结果 */
+  active: boolean;
   intervalSec: number;
   maxCount: number;
   lastMessage?: string;
@@ -136,11 +138,11 @@ function stopInternal(email: string, message?: string, status: PollStatus = 'sto
     state.timer = null;
   }
   state.status = status;
-  state.lastMessage = message;
+  if (message) state.lastMessage = message;
   state.isPolling = false;
-  pollMap.delete(email);
-  // 保留最后快照给 UI：用临时 entry 再 emit 后删除会丢，改为 emit 前写入 ghost
-  // 简化：直接 emit 当前 map，并额外通知一次带 message 的 snapshot
+  // 保留 entry 作为幽灵快照：UI 需要看到「监听完成/找到验证码」的最终状态，
+  // 删除会导致 stop 后的最后一次 emit 丢失该账号的结果（ZER-381 状态丢失问题）。
+  state.active = false;
   emit();
 }
 
@@ -167,7 +169,7 @@ async function collectFolderIds(email: string, folder: string): Promise<string[]
 }
 
 async function pollOnce(email: string, state: PollState) {
-  if (!pollMap.has(email) || state.isPolling) return;
+  if (!state.active || pollMap.get(email) !== state || state.isPolling) return;
   state.isPolling = true;
   state.status = 'polling';
   emit();
@@ -176,7 +178,7 @@ async function pollOnce(email: string, state: PollState) {
       collectFolderIds(email, 'inbox'),
       collectFolderIds(email, 'junkemail').catch(() => [] as string[]),
     ]);
-    if (!pollMap.has(email)) return;
+    if (!state.active || pollMap.get(email) !== state) return;
 
     state.pollCount += 1;
     state.errorCount = 0;
@@ -255,6 +257,7 @@ export async function startPoll(
     errorCount: 0,
     pollCount: 0,
     isPolling: false,
+    active: true,
     intervalSec,
     maxCount,
     status: 'polling',
@@ -267,7 +270,7 @@ export async function startPoll(
       collectFolderIds(addr, 'inbox'),
       collectFolderIds(addr, 'junkemail').catch(() => [] as string[]),
     ]);
-    if (!pollMap.has(addr)) return;
+    if (!state.active || pollMap.get(addr) !== state) return;
     [...inboxIds, ...junkIds].forEach((id) => state.baselineIds.add(id));
   } catch {
     // baseline 失败仍继续轮询
@@ -275,14 +278,15 @@ export async function startPoll(
 
   // 首次轮询略延迟，确保 baseline 写入
   setTimeout(() => {
-    if (pollMap.has(addr)) void pollOnce(addr, state);
+    if (state.active && pollMap.get(addr) === state) void pollOnce(addr, state);
   }, 150);
 
   state.timer = setInterval(() => {
-    if (pollMap.has(addr)) void pollOnce(addr, state);
+    if (state.active && pollMap.get(addr) === state) void pollOnce(addr, state);
   }, Math.max(1, intervalSec) * 1000);
 }
 
 export function isPolling(email: string): boolean {
-  return pollMap.has(email);
+  const state = pollMap.get(email);
+  return !!(state && state.active);
 }

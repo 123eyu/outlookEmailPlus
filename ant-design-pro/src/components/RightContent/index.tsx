@@ -1,3 +1,4 @@
+import GithubLink from './GithubLink';
 import { LangDropdown } from './LangDropdown';
 
-export { LangDropdown };
+export { GithubLink, LangDropdown };
