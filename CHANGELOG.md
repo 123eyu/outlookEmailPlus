@@ -18,7 +18,10 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ### 测试/验证 / Testing & Verification
 
-- 待完成本地前后端质量门禁后补充。
+- Python 3.11 / 3.12 / 3.13 全量回归：`1647 passed`，skipped 13，覆盖率 87%。
+- Python 质量门禁：Black、isort、Flake8、复杂度检查、mypy 与 Bandit 全部通过。
+- SPA 质量门禁：Biome、TypeScript、Vitest 与生产构建全部通过。
+- 视觉验收：无头 Chrome 生成 1440×1200 与 390×844 两档性能看板截图；KPI、表格、瓶颈告警和建议区无文字或控件遮挡。
 
 ## [v2.9.5] - 2026-08-05
 
