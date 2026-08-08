@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import jsonify, request
@@ -35,7 +36,7 @@ def _mask_secret_value(value: str, head: int = 4, tail: int = 4) -> str:
     return safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
 
 
-def _parse_allowed_emails_input(raw: Any) -> list[str]:
+def _allowed_email_candidates(raw: Any) -> list[str]:
     if raw in (None, "", []):
         return []
     if isinstance(raw, list):
@@ -50,15 +51,25 @@ def _parse_allowed_emails_input(raw: Any) -> list[str]:
         except (json.JSONDecodeError, TypeError):
             values = [item.strip() for item in text.replace("\r", "\n").replace(",", "\n").split("\n")]
 
+    return [str(item or "").strip() for item in values if str(item or "").strip()]
+
+
+def _parse_allowed_emails_input(raw: Any) -> list[str]:
+    values = _allowed_email_candidates(raw)
+
     result: list[str] = []
     seen: set[str] = set()
     for item in values:
-        email_addr = str(item or "").strip().lower()
-        if not email_addr or "@" not in email_addr or email_addr in seen:
+        email_addr = item.lower()
+        if not _is_valid_notification_email(email_addr) or email_addr in seen:
             continue
         seen.add(email_addr)
         result.append(email_addr)
     return result
+
+
+def _invalid_allowed_emails_input(raw: Any) -> list[str]:
+    return [item for item in _allowed_email_candidates(raw) if not _is_valid_notification_email(item)]
 
 
 def _parse_bool_input(raw: Any, *, default: bool = False) -> bool:
@@ -345,6 +356,105 @@ def api_get_external_api_key_plaintext() -> Any:
 
     log_audit("copy_external_api_key", "settings", None, "复制对外 API Key 明文")
     return jsonify({"success": True, "api_key": api_key_value})
+
+
+@login_required
+def api_create_external_api_key() -> Any:
+    """创建由服务端生成的 API Key，并仅在本次响应中返回明文。"""
+    data = request.get_json(silent=True)
+    if data is None or not isinstance(data, dict):
+        return _json_error(
+            "EXTERNAL_API_KEY_REQUEST_INVALID",
+            "请求体必须是 JSON 对象",
+            status=400,
+            message_en="Request body must be a JSON object",
+        )
+
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return _json_error(
+            "EXTERNAL_API_KEY_NAME_REQUIRED",
+            "Key 名称不能为空",
+            status=400,
+            message_en="API key name is required",
+        )
+    if len(name) > 100:
+        return _json_error(
+            "EXTERNAL_API_KEY_NAME_TOO_LONG",
+            "Key 名称不能超过 100 个字符",
+            status=400,
+            message_en="API key name must be 100 characters or fewer",
+        )
+
+    existing_names = {
+        str(item.get("name") or "").strip().lower()
+        for item in external_api_keys_repo.list_external_api_keys(include_disabled=True)
+    }
+    if name.lower() in existing_names:
+        return _json_error(
+            "EXTERNAL_API_KEY_NAME_CONFLICT",
+            "已存在同名 API Key",
+            status=409,
+            message_en="An API key with this name already exists",
+        )
+
+    expires_at = None
+    raw_expiry_days = data.get("expires_in_days")
+    if raw_expiry_days not in (None, "", 0, "0", "never"):
+        try:
+            expiry_days = int(raw_expiry_days)
+        except (TypeError, ValueError):
+            expiry_days = 0
+        if expiry_days < 1 or expiry_days > 3650:
+            return _json_error(
+                "EXTERNAL_API_KEY_EXPIRY_INVALID",
+                "过期时间必须在 1 到 3650 天之间，或选择永不过期",
+                status=400,
+                message_en="Expiry must be between 1 and 3650 days, or never",
+            )
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=expiry_days)
+        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    raw_allowed_emails = data.get("allowed_emails")
+    allowed_emails = _parse_allowed_emails_input(raw_allowed_emails)
+    invalid_emails = _invalid_allowed_emails_input(raw_allowed_emails)
+    if invalid_emails or (raw_allowed_emails not in (None, "", []) and not allowed_emails):
+        return _json_error(
+            "EXTERNAL_API_KEY_EMAIL_SCOPE_INVALID",
+            "邮箱范围包含无效地址",
+            status=400,
+            message_en="Email scope contains an invalid address",
+            details={"invalid_emails": invalid_emails[:5]},
+        )
+
+    api_key = f"oep_{secrets.token_urlsafe(32)}"
+    item = external_api_keys_repo.create_external_api_key(
+        name=name,
+        api_key=api_key,
+        allowed_emails=allowed_emails,
+        pool_access=_parse_bool_input(data.get("pool_access"), default=False),
+        enabled=_parse_bool_input(data.get("enabled"), default=True),
+        expires_at=expires_at,
+    )
+    log_audit(
+        "create_external_api_key",
+        "settings",
+        item.get("id"),
+        f"name={name} expires_at={expires_at or 'never'}",
+    )
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "API Key 已创建，请立即复制并妥善保存",
+                "message_en": "API key created. Copy and store it now",
+                "api_key": api_key,
+                "item": item,
+            }
+        ),
+        201,
+    )
 
 
 @login_required
@@ -759,9 +869,11 @@ def api_update_settings() -> Any:
                 if existing and api_key_value == existing.get("api_key_masked"):
                     api_key_value = None
 
-                allowed_emails = _parse_allowed_emails_input(item.get("allowed_emails"))
-                if item.get("allowed_emails") not in (None, "", []) and not allowed_emails:
-                    errors.append(f"external_api_keys[{index}].allowed_emails 至少包含一个合法邮箱")
+                raw_allowed_emails = item.get("allowed_emails")
+                allowed_emails = _parse_allowed_emails_input(raw_allowed_emails)
+                invalid_emails = _invalid_allowed_emails_input(raw_allowed_emails)
+                if invalid_emails or (raw_allowed_emails not in (None, "", []) and not allowed_emails):
+                    errors.append(f"external_api_keys[{index}].allowed_emails 包含无效地址")
                     continue
 
                 normalized_items.append(
@@ -772,6 +884,7 @@ def api_update_settings() -> Any:
                         "allowed_emails": allowed_emails,
                         "pool_access": _parse_bool_input(item.get("pool_access"), default=False),
                         "enabled": _parse_bool_input(item.get("enabled"), default=True),
+                        "expires_at": item.get("expires_at"),
                     }
                 )
 

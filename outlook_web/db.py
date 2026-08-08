@@ -38,7 +38,8 @@ from outlook_web.security.crypto import (
 # v22：2026-04-16 邮箱池项目维度成功复用（accounts.claimed_project_key + account_project_usage.success_*）
 # v23：2026-04-19 数据概览大盘（verification_extract_logs + overview 兼容字段）
 # v24：2026-07-01 临时邮箱接入邮箱池（temp_emails 新增池生命周期字段：pool_status/claimed_by/...，可被 claim-random 领取）
-DB_SCHEMA_VERSION = 24
+# v25：ZER-537 — external_api_keys 新增 expires_at，支持 API Key 生命周期管理
+DB_SCHEMA_VERSION = 25
 DB_SCHEMA_VERSION_KEY = "db_schema_version"
 DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY = "db_schema_last_upgrade_trace_id"
 DB_SCHEMA_LAST_UPGRADE_ERROR_KEY = "db_schema_last_upgrade_error"
@@ -944,6 +945,7 @@ def init_db(database_path: Optional[str] = None):
                 allowed_emails_json TEXT NOT NULL DEFAULT '[]',
                 pool_access INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                expires_at TIMESTAMP,
                 last_used_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -953,9 +955,11 @@ def init_db(database_path: Optional[str] = None):
         external_api_keys_columns = [col[1] for col in cursor.fetchall()]
         if "pool_access" not in external_api_keys_columns:
             cursor.execute("ALTER TABLE external_api_keys ADD COLUMN pool_access INTEGER NOT NULL DEFAULT 0")
+        if "expires_at" not in external_api_keys_columns:
+            cursor.execute("ALTER TABLE external_api_keys ADD COLUMN expires_at TIMESTAMP")
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_external_api_keys_enabled
-            ON external_api_keys(enabled, updated_at)
+            ON external_api_keys(enabled, expires_at, updated_at)
             """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_external_api_keys_name
