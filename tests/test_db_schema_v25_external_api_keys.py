@@ -111,16 +111,13 @@ class DbSchemaV25ExternalApiKeyTests(unittest.TestCase):
 
             conn = sqlite3.connect(str(db_path))
             try:
-                migration = conn.execute(
-                    "SELECT status, error FROM schema_migrations ORDER BY id DESC LIMIT 1"
-                ).fetchone()
+                migration = conn.execute("SELECT status, error FROM schema_migrations ORDER BY id DESC LIMIT 1").fetchone()
                 self.assertIsNotNone(migration)
                 self.assertEqual(migration[0], "failed")
                 self.assertIn("external_api_keys.name", str(migration[1] or ""))
 
                 unique_index = conn.execute(
-                    "SELECT name FROM sqlite_master "
-                    "WHERE type = 'index' AND name = 'idx_external_api_keys_name_unique'"
+                    "SELECT name FROM sqlite_master " "WHERE type = 'index' AND name = 'idx_external_api_keys_name_unique'"
                 ).fetchone()
                 self.assertIsNone(unique_index)
             finally:
