@@ -53,10 +53,15 @@ jobs:
             --window-size=1440,1200 --virtual-time-budget=5000 \
             --screenshot=performance-dashboard.png \
             "http://127.0.0.1:4173/overview?tab=performance"
+          google-chrome --headless --no-sandbox --disable-gpu \
+            --window-size=390,844 --virtual-time-budget=5000 \
+            --screenshot=performance-dashboard-mobile.png \
+            "http://127.0.0.1:4173/overview?tab=performance"
           test -s performance-dashboard.png
+          test -s performance-dashboard-mobile.png
       - name: Upload visual smoke artifact
         uses: actions/upload-artifact@v4
         with:
           name: performance-dashboard
-          path: ant-design-pro/performance-dashboard.png
+          path: ant-design-pro/performance-dashboard*.png
           if-no-files-found: error
