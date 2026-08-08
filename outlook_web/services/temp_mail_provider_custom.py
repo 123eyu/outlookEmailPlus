@@ -85,6 +85,14 @@ class CustomTempMailProvider(TempMailProviderBase):
     provider_label = "通用 API (GPTMail)"
     provider_version = "1.0.0"
     provider_author = "OutlookMail Plus"
+    provider_capabilities = {
+        "create_mailbox": True,
+        "list_messages": True,
+        "get_message_detail": True,
+        "delete_mailbox": False,
+        "delete_message": True,
+        "clear_messages": True,
+    }
 
     def __init__(self, *, provider_name: str | None = None):
         self.provider_name = settings_repo.get_temp_mail_runtime_provider_name(provider_name)
@@ -101,9 +109,9 @@ class CustomTempMailProvider(TempMailProviderBase):
             "provider_cursor": "",
             "provider_labels": [],
             "provider_capabilities": {
-                "delete_mailbox": False,
-                "delete_message": True,
-                "clear_messages": True,
+                "delete_mailbox": self.provider_capabilities["delete_mailbox"],
+                "delete_message": self.provider_capabilities["delete_message"],
+                "clear_messages": self.provider_capabilities["clear_messages"],
             },
             "provider_debug": {"bridge": "gptmail"},
         }
