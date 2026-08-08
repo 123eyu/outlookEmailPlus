@@ -40,7 +40,7 @@ import {
   formatPercent,
   formatTime,
 } from './utils';
-import { useIntl } from '@umijs/max';
+import { history, useIntl } from '@umijs/max';
 
 type TabKey =
   | 'summary'
@@ -49,6 +49,22 @@ type TabKey =
   | 'pool'
   | 'performance'
   | 'activity';
+
+const TAB_KEYS = new Set<TabKey>([
+  'summary',
+  'verification',
+  'external-api',
+  'pool',
+  'performance',
+  'activity',
+]);
+
+function getInitialTab(): TabKey {
+  const requested = new URLSearchParams(history.location.search).get('tab') as
+    | TabKey
+    | null;
+  return requested && TAB_KEYS.has(requested) ? requested : 'summary';
+}
 
 function ProgressList({
   items,
@@ -820,7 +836,7 @@ const ActivityPane: React.FC<{
 
 const OverviewPage: React.FC = () => {
   const intl = useIntl();
-  const [activeTab, setActiveTab] = useState<TabKey>('summary');
+  const [activeTab, setActiveTab] = useState<TabKey>(getInitialTab);
 
   const summaryQuery = useQuery({
     queryKey: ['overview', 'summary'],

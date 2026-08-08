@@ -36,3 +36,27 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Start performance visual smoke server
+        run: |
+          nohup node scripts/performance-preview-server.mjs > /tmp/performance-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/overview?tab=performance > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/performance-preview.log
+          exit 1
+      - name: Capture performance dashboard
+        run: |
+          google-chrome --headless --no-sandbox --disable-gpu \
+            --window-size=1440,1200 --virtual-time-budget=5000 \
+            --screenshot=performance-dashboard.png \
+            "http://127.0.0.1:4173/overview?tab=performance"
+          test -s performance-dashboard.png
+      - name: Upload visual smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-dashboard
+          path: ant-design-pro/performance-dashboard.png
+          if-no-files-found: error
