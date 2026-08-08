@@ -1,9 +1,12 @@
 name: ZER-538 Frontend Validation
 
 on:
-  push:
+  pull_request:
     branches:
-      - delivery/zer-538-temp-email-ui
+      - cursor/zer-381-frontend-polish-b985
+    paths:
+      - "ant-design-pro/**"
+      - ".github/workflows/zer-538-frontend-validation.yml"
 
 permissions:
   contents: read
