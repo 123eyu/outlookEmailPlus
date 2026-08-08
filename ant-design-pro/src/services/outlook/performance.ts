@@ -21,8 +21,8 @@ const FLUSH_DELAY_MS = 2000;
 const PAGE_SETTLE_MS = 500;
 
 let queue: ClientPerformanceMetric[] = [];
-let flushTimer: ReturnType<typeof setTimeout> | undefined;
-let pageTimer: ReturnType<typeof setTimeout> | undefined;
+let flushTimer: number | undefined;
+let pageTimer: number | undefined;
 let activePage: ActivePageMeasurement | undefined;
 let pendingApiRequests = 0;
 let flushing = false;

@@ -26,6 +26,8 @@ jobs:
           cache-dependency-path: ant-design-pro/package-lock.json
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate Umi runtime types
+        run: npx max setup
       - name: Lint
         run: npm run biome:lint
       - name: Type check
