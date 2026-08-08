@@ -18,6 +18,7 @@ type ActivePageMeasurement = {
 const MAX_QUEUE_SIZE = 200;
 const MAX_BATCH_SIZE = 50;
 const FLUSH_DELAY_MS = 2000;
+const MAX_RETRY_DELAY_MS = 30_000;
 const PAGE_SETTLE_MS = 500;
 
 let queue: ClientPerformanceMetric[] = [];
@@ -28,6 +29,7 @@ let pendingApiRequests = 0;
 let flushing = false;
 let monitoringInstalled = false;
 let navigationReported = false;
+let flushDelayMs = FLUSH_DELAY_MS;
 
 function monotonicNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -64,7 +66,7 @@ function enqueueMetric(metric: ClientPerformanceMetric): void {
   if (queue.length > MAX_QUEUE_SIZE) {
     queue = queue.slice(-MAX_QUEUE_SIZE);
   }
-  if (queue.length >= MAX_BATCH_SIZE) {
+  if (queue.length >= MAX_BATCH_SIZE && flushDelayMs === FLUSH_DELAY_MS) {
     void flushClientPerformanceMetrics();
     return;
   }
@@ -78,7 +80,7 @@ function scheduleFlush(): void {
   flushTimer = window.setTimeout(() => {
     flushTimer = undefined;
     void flushClientPerformanceMetrics();
-  }, FLUSH_DELAY_MS);
+  }, flushDelayMs);
 }
 
 export async function flushClientPerformanceMetrics(): Promise<void> {
@@ -104,8 +106,10 @@ export async function flushClientPerformanceMetrics(): Promise<void> {
       headers,
       skipErrorHandler: true,
     });
+    flushDelayMs = FLUSH_DELAY_MS;
   } catch (_error) {
     queue = [...batch, ...queue].slice(-MAX_QUEUE_SIZE);
+    flushDelayMs = Math.min(MAX_RETRY_DELAY_MS, flushDelayMs * 2);
   } finally {
     flushing = false;
     scheduleFlush();
