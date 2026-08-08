@@ -18,6 +18,7 @@ import {
   Button,
   Empty,
   Form,
+  Grid,
   Input,
   List,
   Popconfirm,
@@ -77,6 +78,8 @@ const TempEmailsPage: React.FC = () => {
   const intl = useIntl();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
+  const screens = Grid.useBreakpoint();
+  const isCompactLayout = screens.sm === false;
 
   const [providerName, setProviderName] = useState<string | undefined>();
   const [selectedEmail, setSelectedEmail] = useState<string | undefined>();
@@ -319,6 +322,25 @@ const TempEmailsPage: React.FC = () => {
     return detail.body;
   }, [detail]);
 
+  const tempMailActionButtons = (
+    <Space wrap style={isCompactLayout ? { width: '100%' } : undefined}>
+      <Button
+        size="small"
+        icon={<SettingOutlined />}
+        onClick={() => history.push('/settings')}
+      >
+        临时邮箱设置
+      </Button>
+      <Button
+        size="small"
+        icon={<AppstoreOutlined />}
+        onClick={() => history.push('/plugins')}
+      >
+        插件管理
+      </Button>
+    </Space>
+  );
+
   return (
     <PageContainer
       title={intl.formatMessage({
@@ -350,7 +372,11 @@ const TempEmailsPage: React.FC = () => {
         showIcon
         style={{ marginBottom: 16 }}
         message={
-          <Space wrap>
+          <Space
+            direction={isCompactLayout ? 'vertical' : 'horizontal'}
+            wrap
+            size={isCompactLayout ? 4 : undefined}
+          >
             <Typography.Text strong>临时邮箱服务</Typography.Text>
             <Tag color={availability.state === 'ready' ? 'success' : 'warning'}>
               {availability.state === 'ready'
@@ -389,26 +415,10 @@ const TempEmailsPage: React.FC = () => {
                 })}
               </Space>
             ) : null}
+            {isCompactLayout ? tempMailActionButtons : null}
           </Space>
         }
-        action={
-          <Space wrap>
-            <Button
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => history.push('/settings')}
-            >
-              临时邮箱设置
-            </Button>
-            <Button
-              size="small"
-              icon={<AppstoreOutlined />}
-              onClick={() => history.push('/plugins')}
-            >
-              插件管理
-            </Button>
-          </Space>
-        }
+        action={isCompactLayout ? undefined : tempMailActionButtons}
       />
 
       <ProCard
