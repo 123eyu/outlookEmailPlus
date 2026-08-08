@@ -28,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run frontend quality checks
+        run: |
+          npm run biome:lint
+          npm run tsc
+          npm test
+
       - name: Build production frontend
         run: npm run build
 
@@ -203,7 +209,15 @@ jobs:
               assert.equal(await generateButton.isEnabled(), true);
             } else {
               await page.getByText('需配置', { exact: true }).waitFor();
-              await page.getByText('企业临时邮箱插件尚未配置，请先完成插件设置。').waitFor();
+              const statusMessage = page.getByText(
+                '企业临时邮箱插件尚未配置，请先完成插件设置。',
+              );
+              await statusMessage.waitFor();
+              const statusBox = await statusMessage.boundingBox();
+              assert.ok(
+                statusBox && statusBox.width > 180,
+                '移动端状态说明宽度异常: ' + JSON.stringify(statusBox),
+              );
               assert.equal(await generateButton.isDisabled(), true);
             }
 
