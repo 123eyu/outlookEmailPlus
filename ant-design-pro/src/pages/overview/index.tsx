@@ -21,6 +21,7 @@ import React, { useMemo, useState } from 'react';
 import {
   fetchOverviewActivity,
   fetchOverviewExternalApi,
+  fetchOverviewPerformance,
   fetchOverviewPool,
   fetchOverviewSummary,
   fetchOverviewVerification,
@@ -30,6 +31,7 @@ import {
   type OverviewSummary,
   type OverviewVerification,
 } from '@/services/outlook/overview';
+import PerformancePane from './PerformancePane';
 import {
   channelLabel,
   formatDurationMs,
@@ -45,6 +47,7 @@ type TabKey =
   | 'verification'
   | 'external-api'
   | 'pool'
+  | 'performance'
   | 'activity';
 
 function ProgressList({
@@ -844,6 +847,12 @@ const OverviewPage: React.FC = () => {
     queryFn: fetchOverviewActivity,
     enabled: activeTab === 'activity',
   });
+  const performanceQuery = useQuery({
+    queryKey: ['overview', 'performance'],
+    queryFn: fetchOverviewPerformance,
+    enabled: activeTab === 'performance',
+    refetchInterval: activeTab === 'performance' ? 30_000 : false,
+  });
 
   const activeMeta = useMemo(() => {
     const map: Record<
@@ -895,6 +904,14 @@ const OverviewPage: React.FC = () => {
           void activityQuery.refetch();
         },
       },
+      performance: {
+        error: performanceQuery.error,
+        isFetching: performanceQuery.isFetching,
+        dataUpdatedAt: performanceQuery.dataUpdatedAt,
+        refetch: () => {
+          void performanceQuery.refetch();
+        },
+      },
     };
     return map[activeTab];
   }, [
@@ -919,6 +936,10 @@ const OverviewPage: React.FC = () => {
     activityQuery.isFetching,
     activityQuery.dataUpdatedAt,
     activityQuery.refetch,
+    performanceQuery.error,
+    performanceQuery.isFetching,
+    performanceQuery.dataUpdatedAt,
+    performanceQuery.refetch,
   ]);
 
   const lastRefresh =
@@ -1011,6 +1032,16 @@ const OverviewPage: React.FC = () => {
               <ActivityPane
                 data={activityQuery.data}
                 loading={activityQuery.isLoading}
+              />
+            ),
+          },
+          {
+            key: 'performance',
+            label: '性能链路',
+            children: (
+              <PerformancePane
+                data={performanceQuery.data}
+                loading={performanceQuery.isLoading}
               />
             ),
           },
