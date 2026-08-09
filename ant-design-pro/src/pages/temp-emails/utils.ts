@@ -95,6 +95,13 @@ export function getMailboxProviderPresentation(
   };
 }
 
+export function isMailboxCapabilityEnabled(
+  capabilities: TempEmailCapabilities,
+  capability: keyof TempEmailCapabilities,
+): boolean {
+  return capabilities[capability] !== false;
+}
+
 export function providerKindLabel(kind?: string): string {
   if (kind === 'legacy') return '历史兼容';
   if (kind === 'plugin') return '插件';
