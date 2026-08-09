@@ -46,6 +46,7 @@ import {
 } from '@/services/outlook/tempEmails';
 import {
   getMailboxProviderPresentation,
+  isMailboxCapabilityEnabled,
   providerKindLabel,
   resolveTempMailAvailability,
 } from './utils';
@@ -508,6 +509,19 @@ const TempEmailsPage: React.FC = () => {
                     item,
                     providerCatalog,
                   );
+                  const canExtractVerification =
+                    isMailboxCapabilityEnabled(
+                      providerPresentation.capabilities,
+                      'list_messages',
+                    ) &&
+                    isMailboxCapabilityEnabled(
+                      providerPresentation.capabilities,
+                      'get_message_detail',
+                    );
+                  const canClearMessages = isMailboxCapabilityEnabled(
+                    providerPresentation.capabilities,
+                    'clear_messages',
+                  );
                   return (
                     <List.Item
                       style={{
@@ -520,11 +534,19 @@ const TempEmailsPage: React.FC = () => {
                       }}
                       onClick={() => setSelectedEmail(item.email)}
                       actions={[
-                        <Tooltip key="code" title="提取验证码">
+                        <Tooltip
+                          key="code"
+                          title={
+                            canExtractVerification
+                              ? '提取验证码'
+                              : '当前 Provider 不支持读取邮件'
+                          }
+                        >
                           <Button
                             type="text"
                             size="small"
                             icon={<KeyOutlined />}
+                            disabled={!canExtractVerification}
                             onClick={(e) => {
                               e.stopPropagation();
                               void onExtractCode(item.email);
@@ -534,13 +556,21 @@ const TempEmailsPage: React.FC = () => {
                         <Popconfirm
                           key="clear"
                           title="清空该邮箱全部邮件？"
+                          disabled={!canClearMessages}
                           onConfirm={() => void onClearMessages(item.email)}
                         >
-                          <Tooltip title="清空邮件">
+                          <Tooltip
+                            title={
+                              canClearMessages
+                                ? '清空邮件'
+                                : '当前 Provider 不支持清空邮件'
+                            }
+                          >
                             <Button
                               type="text"
                               size="small"
                               icon={<ClearOutlined />}
+                              disabled={!canClearMessages}
                               onClick={(e) => e.stopPropagation()}
                             />
                           </Tooltip>
