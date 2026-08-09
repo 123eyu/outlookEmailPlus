@@ -16,7 +16,7 @@ type MailboxActionsProps = {
 };
 
 export function MailboxActions({
-  capabilities,
+  capabilities = {},
   onExtractVerification,
   onClearMessages,
   onDeleteMailbox,
