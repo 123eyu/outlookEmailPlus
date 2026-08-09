@@ -40,6 +40,7 @@ import MailboxFolderSwitch, {
   getMailboxFolderLabel,
 } from '@/components/MailboxFolderSwitch';
 import { usePollingSettingsDraft } from '@/hooks/usePollingSettingsDraft';
+import { summarizeDualFolderPull } from '@/utils/mailboxPull';
 import { type AccountItem, fetchAccounts } from '@/services/outlook/accounts';
 import {
   deleteEmails,
@@ -591,17 +592,27 @@ const MailboxPage: React.FC = () => {
           top: 10,
         }),
       ]);
-      const ok = results.some(
-        (r) => r.status === 'fulfilled' && r.value?.success,
-      );
-      if (ok) {
+      const summary = summarizeDualFolderPull(results);
+      if (summary.status === 'success') {
         message.success(`已拉取 ${email}（收件箱 + 垃圾邮件）`);
-        // 若当前选中该账号，刷新列表
-        if (selectedEmail === email && viewMode === 'standard') {
-          await loadEmails({ append: false, nextSkip: 0 });
-        }
+      } else if (summary.status === 'partial') {
+        message.warning(
+          `部分拉取成功：${email}；已完成：${summary.succeededFolders.join(
+            '、',
+          )}；失败：${summary.failedFolders.join('、')}`,
+        );
       } else {
-        message.error(`拉取失败：${email}`);
+        message.error(
+          `拉取失败：${email}（${summary.failedFolders.join('、')}）`,
+        );
+      }
+      // 任一文件夹成功后，刷新当前选中的邮件列表。
+      if (
+        summary.status !== 'failure' &&
+        selectedEmail === email &&
+        viewMode === 'standard'
+      ) {
+        await loadEmails({ append: false, nextSkip: 0 });
       }
     } catch (error: any) {
       message.error(error?.message || '拉取失败');
