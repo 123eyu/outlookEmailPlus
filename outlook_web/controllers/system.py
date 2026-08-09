@@ -112,6 +112,12 @@ def healthz() -> Any:
         except Exception:
             return ""
 
+    def _clean(value: str | None) -> str:
+        text = (value or "").strip()
+        if not text or text.lower() in {"unknown", "null", "none"}:
+            return ""
+        return text
+
     build_info = _read_build_file("/app/.build-info") or _read_build_file(".build-info")
     info_map: dict[str, str] = {}
     for line in build_info.splitlines():
@@ -120,26 +126,26 @@ def healthz() -> Any:
             info_map[key.strip()] = value.strip()
 
     git_sha = (
-        os.getenv("BUILD_SHA")
-        or os.getenv("RAILWAY_GIT_COMMIT_SHA")
-        or os.getenv("GITHUB_SHA")
-        or _read_build_file("/app/.build_sha")
-        or info_map.get("sha", "")
+        _clean(os.getenv("BUILD_SHA"))
+        or _clean(os.getenv("RAILWAY_GIT_COMMIT_SHA"))
+        or _clean(os.getenv("GITHUB_SHA"))
+        or _clean(_read_build_file("/app/.build_sha"))
+        or _clean(info_map.get("sha"))
         or ""
-    ).strip()
+    )
     git_branch = (
-        os.getenv("BUILD_BRANCH")
-        or os.getenv("RAILWAY_GIT_BRANCH")
-        or _read_build_file("/app/.build_branch")
-        or info_map.get("branch", "")
+        _clean(os.getenv("BUILD_BRANCH"))
+        or _clean(os.getenv("RAILWAY_GIT_BRANCH"))
+        or _clean(_read_build_file("/app/.build_branch"))
+        or _clean(info_map.get("branch"))
         or ""
-    ).strip()
+    )
     build_time = (
-        os.getenv("BUILD_TIME")
-        or _read_build_file("/app/.build_time")
-        or info_map.get("time", "")
+        _clean(os.getenv("BUILD_TIME"))
+        or _clean(_read_build_file("/app/.build_time"))
+        or _clean(info_map.get("time"))
         or ""
-    ).strip()
+    )
     return (
         jsonify(
             {

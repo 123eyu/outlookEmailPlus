@@ -13,20 +13,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ARG BUILD_SHA=unknown
-ARG BUILD_BRANCH=unknown
-ARG BUILD_TIME=unknown
-
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     GUNICORN_WORKERS=1 \
     GUNICORN_THREADS=8 \
     GUNICORN_TIMEOUT=120 \
-    SPA_ENABLED=true \
-    BUILD_SHA=${BUILD_SHA} \
-    BUILD_BRANCH=${BUILD_BRANCH} \
-    BUILD_TIME=${BUILD_TIME}
+    SPA_ENABLED=true
 
 COPY requirements.txt .
 RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && \
@@ -36,11 +29,8 @@ RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && \
 COPY . .
 COPY --from=frontend /frontend/dist /app/ant-design-pro/dist
 
-# Persist build identity for runtime diagnostics (/healthz).
-RUN printf '%s\n' "$BUILD_SHA" > /app/.build_sha && \
-    printf '%s\n' "$BUILD_BRANCH" > /app/.build_branch && \
-    printf '%s\n' "$BUILD_TIME" > /app/.build_time && \
-    mkdir -p /app/data && chmod +x /app/scripts/start-gunicorn.sh
+RUN mkdir -p /app/data && chmod +x /app/scripts/start-gunicorn.sh && \
+    if [ -f /app/.build-info ]; then cp /app/.build-info /app/.build_info_copy; fi
 
 EXPOSE 5000
 
