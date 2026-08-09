@@ -17,9 +17,11 @@ describe('email folder request contracts', () => {
   });
 
   it.each([
-    ['inbox', '收件箱'],
-    ['junkemail', '垃圾邮件'],
-  ] as const)('requests the %s folder independently (%s)', async (folder) => {
+    { folder: 'inbox', label: '收件箱' },
+    { folder: 'junkemail', label: '垃圾邮件' },
+  ] as const)('requests the $folder folder independently ($label)', async ({
+    folder,
+  }) => {
     await fetchEmails('user+tag@example.com', {
       method: 'graph',
       folder,
