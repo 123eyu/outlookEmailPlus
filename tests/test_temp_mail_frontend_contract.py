@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from outlook_web.repositories import temp_emails as temp_emails_repo
+from outlook_web.services.temp_mail_provider_cf import CloudflareTempMailProvider
 from outlook_web.services.temp_mail_service import TempMailService
 
 
@@ -69,6 +70,35 @@ class TempMailFrontendContractTest(unittest.TestCase):
         options = self._get_options(_Provider(api_base_url=""))
 
         self.assertTrue(options["enabled"])
+        self.assertFalse(options["configured"])
+        self.assertEqual(options["status"], "not_configured")
+
+    def test_cloudflare_requires_admin_key_and_enabled_domain(self):
+        provider = CloudflareTempMailProvider()
+        domains = [{"name": "mail.example.test", "enabled": True}]
+        with patch.object(provider, "_base_url", return_value="https://mail.example.test"), patch.object(
+            provider, "_admin_key", return_value=""
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_cf_worker_domains",
+            return_value=domains,
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_cf_worker_default_domain",
+            return_value="mail.example.test",
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_cf_worker_prefix_rules",
+            return_value={},
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_temp_mail_domains",
+            return_value=[],
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_temp_mail_default_domain",
+            return_value="",
+        ), patch(
+            "outlook_web.services.temp_mail_provider_cf.settings_repo.get_temp_mail_prefix_rules",
+            return_value={},
+        ):
+            options = TempMailService(provider=provider).get_options()
+
         self.assertFalse(options["configured"])
         self.assertEqual(options["status"], "not_configured")
 
