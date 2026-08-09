@@ -4,6 +4,10 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+### 集成 / Integration
+
+- **#109 新前端主线回收**：将 polish 分支与功能 PR（#130/#131/#132/#133/#134/#137）统一回收到 `feat/ant-design-pro-frontend-migration`（PR #109）。Railway 测试环境源分支改绑本分支。
+
 ### 新增功能 / New Features
 
 - **ZER-539 前后端性能链路观测**：统一采集页面加载、浏览器端到端 API、Flask 路由、邮件链路与真实 AI 调用耗时；新增滚动窗口聚合、P50/P95、错误率、瓶颈判断和优化建议。
