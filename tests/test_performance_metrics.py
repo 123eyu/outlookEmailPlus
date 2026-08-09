@@ -98,9 +98,7 @@ class PerformanceMetricsTests(unittest.TestCase):
                 duration_ms=25,
                 trace_id="self-observation",
             )
-        self.assertEqual(
-            get_performance_snapshot()["summary"]["backend_api"]["count"], 0
-        )
+        self.assertEqual(get_performance_snapshot()["summary"]["backend_api"]["count"], 0)
 
     def test_frontend_overhead_uses_unique_trace_and_matching_endpoint(self) -> None:
         for index in range(3):
@@ -149,11 +147,7 @@ class PerformanceMetricsTests(unittest.TestCase):
         overhead = snapshot["summary"]["frontend_overhead"]
         self.assertEqual(overhead["count"], 3)
         self.assertEqual(overhead["p95_ms"], 700.0)
-        findings = [
-            item
-            for item in snapshot["bottlenecks"]
-            if item["layer"] == "前端/网络"
-        ]
+        findings = [item for item in snapshot["bottlenecks"] if item["layer"] == "前端/网络"]
         self.assertEqual(len(findings), 1)
         self.assertIn("3 条唯一 trace", findings[0]["evidence"])
 

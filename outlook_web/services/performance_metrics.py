@@ -75,10 +75,7 @@ def normalize_metric_name(value: Any) -> str:
         return "unknown"
     if not raw.startswith("/"):
         return raw[:120]
-    segments = [
-        part if not part or part.lower() in _SAFE_PATH_SEGMENTS else ":id"
-        for part in raw.split("/")
-    ]
+    segments = [part if not part or part.lower() in _SAFE_PATH_SEGMENTS else ":id" for part in raw.split("/")]
     segments = [":id" if _ROUTE_PARAMETER.match(part) else part for part in segments]
     return "/".join(segments)[:160]
 
@@ -106,10 +103,7 @@ def record_server_request(
     if duration is None:
         return
     normalized_route = normalize_metric_name(route)
-    if (
-        normalized_route.startswith("/static/")
-        or normalized_route in _IGNORED_SERVER_ROUTES
-    ):
+    if normalized_route.startswith("/static/") or normalized_route in _IGNORED_SERVER_ROUTES:
         return
     try:
         status_code = int(status)
@@ -226,9 +220,7 @@ def _grouped_summary(
     return rows[:limit]
 
 
-def _paired_frontend_overhead(
-    server: list[dict[str, Any]], client_api: list[dict[str, Any]]
-) -> dict[str, Any]:
+def _paired_frontend_overhead(server: list[dict[str, Any]], client_api: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate only unique trace pairs that refer to the same endpoint."""
     server_by_trace: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     client_by_trace: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
