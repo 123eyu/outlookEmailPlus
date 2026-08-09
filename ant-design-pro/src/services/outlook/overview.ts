@@ -140,6 +140,51 @@ export type OverviewActivity = {
   [key: string]: any;
 };
 
+export type PerformanceMetricSummary = {
+  count?: number;
+  error_count?: number;
+  error_rate?: number;
+  avg_ms?: number;
+  p50_ms?: number;
+  p95_ms?: number;
+  max_ms?: number;
+  source?: string;
+};
+
+export type PerformanceBreakdown = PerformanceMetricSummary & {
+  name: string;
+  method?: string;
+};
+
+export type OverviewPerformance = {
+  window?: {
+    seconds?: number;
+    started_at?: number;
+    generated_at?: number;
+    storage?: string;
+    sample_limit_per_type?: number;
+  };
+  summary?: {
+    backend_api?: PerformanceMetricSummary;
+    frontend_api?: PerformanceMetricSummary;
+    frontend_overhead?: PerformanceMetricSummary;
+    page?: PerformanceMetricSummary;
+    mail?: PerformanceMetricSummary;
+    ai?: PerformanceMetricSummary;
+  };
+  endpoints?: PerformanceBreakdown[];
+  client_endpoints?: PerformanceBreakdown[];
+  pages?: PerformanceBreakdown[];
+  bottlenecks?: Array<{
+    layer: string;
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    evidence: string;
+    recommendation: string;
+  }>;
+  recommendations?: string[];
+};
+
 export async function fetchOverviewSummary() {
   return outlookRequest<OverviewSummary>('/api/overview/summary', {
     method: 'GET',
@@ -167,5 +212,12 @@ export async function fetchOverviewPool() {
 export async function fetchOverviewActivity() {
   return outlookRequest<OverviewActivity>('/api/overview/activity', {
     method: 'GET',
+  });
+}
+
+export async function fetchOverviewPerformance() {
+  return outlookRequest<OverviewPerformance>('/api/overview/performance', {
+    method: 'GET',
+    skipPerformanceTracking: true,
   });
 }

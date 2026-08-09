@@ -21,6 +21,7 @@ import React, { useMemo, useState } from 'react';
 import {
   fetchOverviewActivity,
   fetchOverviewExternalApi,
+  fetchOverviewPerformance,
   fetchOverviewPool,
   fetchOverviewSummary,
   fetchOverviewVerification,
@@ -30,6 +31,7 @@ import {
   type OverviewSummary,
   type OverviewVerification,
 } from '@/services/outlook/overview';
+import PerformancePane from './PerformancePane';
 import {
   channelLabel,
   formatDurationMs,
@@ -38,14 +40,31 @@ import {
   formatPercent,
   formatTime,
 } from './utils';
-import { useIntl } from '@umijs/max';
+import { history, useIntl } from '@umijs/max';
 
 type TabKey =
   | 'summary'
   | 'verification'
   | 'external-api'
   | 'pool'
+  | 'performance'
   | 'activity';
+
+const TAB_KEYS = new Set<TabKey>([
+  'summary',
+  'verification',
+  'external-api',
+  'pool',
+  'performance',
+  'activity',
+]);
+
+function getInitialTab(): TabKey {
+  const requested = new URLSearchParams(history.location.search).get('tab') as
+    | TabKey
+    | null;
+  return requested && TAB_KEYS.has(requested) ? requested : 'summary';
+}
 
 function ProgressList({
   items,
@@ -817,7 +836,7 @@ const ActivityPane: React.FC<{
 
 const OverviewPage: React.FC = () => {
   const intl = useIntl();
-  const [activeTab, setActiveTab] = useState<TabKey>('summary');
+  const [activeTab, setActiveTab] = useState<TabKey>(getInitialTab);
 
   const summaryQuery = useQuery({
     queryKey: ['overview', 'summary'],
@@ -843,6 +862,12 @@ const OverviewPage: React.FC = () => {
     queryKey: ['overview', 'activity'],
     queryFn: fetchOverviewActivity,
     enabled: activeTab === 'activity',
+  });
+  const performanceQuery = useQuery({
+    queryKey: ['overview', 'performance'],
+    queryFn: fetchOverviewPerformance,
+    enabled: activeTab === 'performance',
+    refetchInterval: activeTab === 'performance' ? 30_000 : false,
   });
 
   const activeMeta = useMemo(() => {
@@ -895,6 +920,14 @@ const OverviewPage: React.FC = () => {
           void activityQuery.refetch();
         },
       },
+      performance: {
+        error: performanceQuery.error,
+        isFetching: performanceQuery.isFetching,
+        dataUpdatedAt: performanceQuery.dataUpdatedAt,
+        refetch: () => {
+          void performanceQuery.refetch();
+        },
+      },
     };
     return map[activeTab];
   }, [
@@ -919,6 +952,10 @@ const OverviewPage: React.FC = () => {
     activityQuery.isFetching,
     activityQuery.dataUpdatedAt,
     activityQuery.refetch,
+    performanceQuery.error,
+    performanceQuery.isFetching,
+    performanceQuery.dataUpdatedAt,
+    performanceQuery.refetch,
   ]);
 
   const lastRefresh =
@@ -1011,6 +1048,16 @@ const OverviewPage: React.FC = () => {
               <ActivityPane
                 data={activityQuery.data}
                 loading={activityQuery.isLoading}
+              />
+            ),
+          },
+          {
+            key: 'performance',
+            label: '性能链路',
+            children: (
+              <PerformancePane
+                data={performanceQuery.data}
+                loading={performanceQuery.isLoading}
               />
             ),
           },

@@ -22,6 +22,10 @@ import {
   type OutlookCurrentUser,
   currentUser as queryCurrentUser,
 } from '@/services/outlook/auth';
+import {
+  beginPageMeasurement,
+  installPerformanceMonitoring,
+} from '@/services/outlook/performance';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
@@ -40,6 +44,8 @@ export async function getInitialState(): Promise<{
   fetchUserInfo?: () => Promise<AppCurrentUser | undefined>;
   settingDrawerOpen?: boolean;
 }> {
+  installPerformanceMonitoring();
+  beginPageMeasurement(history.location.pathname);
   const fetchUserInfo = async () => {
     try {
       const msg = await queryCurrentUser({
@@ -110,6 +116,7 @@ export const layout: RunTimeLayoutConfig = ({
     footerRender: () => <Footer />,
     onPageChange: () => {
       const { location } = history;
+      beginPageMeasurement(location.pathname);
       // 如果没有登录，重定向到 login
       if (!initialState?.currentUser && location.pathname !== loginPath) {
         history.replace(
