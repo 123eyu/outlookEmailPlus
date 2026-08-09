@@ -23,6 +23,7 @@ jobs:
           cache-dependency-path: ant-design-pro/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run biome:lint
+      - run: npx max setup
       - run: npm run tsc
       - run: npm test
       - run: npm run build
