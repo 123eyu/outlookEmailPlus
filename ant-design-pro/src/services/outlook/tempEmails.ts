@@ -1,10 +1,33 @@
 import { outlookRequest } from './request';
 
+export type TempEmailCapabilities = {
+  create_mailbox?: boolean;
+  list_messages?: boolean;
+  get_message_detail?: boolean;
+  delete_mailbox?: boolean;
+  delete_message?: boolean;
+  clear_messages?: boolean;
+};
+
+export type TempEmailProvider = {
+  name: string;
+  label?: string;
+  version?: string;
+  author?: string;
+  kind?: 'builtin' | 'plugin' | string;
+  active?: boolean;
+  selected?: boolean;
+  [key: string]: any;
+};
+
 export type TempEmailItem = {
   email: string;
   status?: string;
   source?: string;
   provider_name?: string;
+  provider_capabilities?: TempEmailCapabilities;
+  compatibility_mode?: 'legacy' | 'native' | string;
+  read_capability?: string;
   created_at?: string;
   [key: string]: any;
 };
@@ -33,9 +56,18 @@ export type TempEmailDetail = {
 
 export type TempEmailOptions = {
   domains?: Array<{ name?: string; domain?: string; enabled?: boolean; [key: string]: any }>;
-  providers?: Array<{ name?: string; label?: string; [key: string]: any }>;
+  providers?: TempEmailProvider[];
   default_domain?: string;
   prefix_rules?: Record<string, any>;
+  provider_name?: string;
+  provider_label?: string;
+  provider_kind?: 'builtin' | 'plugin' | string;
+  active_provider?: string;
+  capabilities?: TempEmailCapabilities;
+  enabled?: boolean;
+  configured?: boolean;
+  status?: 'ready' | 'disabled' | 'not_configured' | string;
+  status_message?: string;
   [key: string]: any;
 };
 
