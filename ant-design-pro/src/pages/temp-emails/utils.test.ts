@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getMailboxProviderPresentation, resolveTempMailAvailability } from './utils';
+import {
+  getMailboxProviderPresentation,
+  isMailboxCapabilityEnabled,
+  resolveTempMailAvailability,
+} from './utils';
 
 describe('temp email presentation', () => {
   it('marks historical GPTMail mailboxes as legacy-compatible', () => {
@@ -31,6 +35,18 @@ describe('temp email presentation', () => {
       kind: 'plugin',
       capabilities: { clear_messages: false },
     });
+  });
+});
+
+describe('mailbox capabilities', () => {
+  it('disables an explicitly unsupported operation', () => {
+    expect(isMailboxCapabilityEnabled({ clear_messages: false }, 'clear_messages')).toBe(
+      false,
+    );
+  });
+
+  it('keeps legacy mailboxes compatible when capability metadata is absent', () => {
+    expect(isMailboxCapabilityEnabled({}, 'clear_messages')).toBe(true);
   });
 });
 
