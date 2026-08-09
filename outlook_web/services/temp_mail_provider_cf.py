@@ -359,11 +359,7 @@ class CloudflareTempMailProvider(TempMailProviderBase):
 
         normalized_domains = _normalize_domain_entries(domains_payload, default_domain)
         base_url = self._base_url()
-        configured = bool(
-            base_url
-            and self._admin_key()
-            and any(item.get("enabled") for item in normalized_domains)
-        )
+        configured = bool(base_url and self._admin_key() and any(item.get("enabled") for item in normalized_domains))
 
         return {
             "domain_strategy": "auto_or_manual",
