@@ -6,23 +6,8 @@ import { createStyles } from 'antd-style';
 import React, { startTransition, useState } from 'react';
 import { Footer } from '@/components';
 import { login } from '@/services/outlook/auth';
+import { getSafeRedirectUrl } from '@/utils/authRedirect';
 import Settings from '../../../../config/defaultSettings';
-
-/**
- * Validate redirect URL to prevent open redirect attacks.
- * Only allow same-origin relative paths starting with '/'.
- */
-const getSafeRedirectUrl = (redirect: string | null): string => {
-  if (!redirect?.startsWith('/')) return '/accounts';
-  if (redirect.startsWith('//')) return '/accounts';
-  try {
-    const parsed = new URL(redirect, window.location.origin);
-    if (parsed.origin !== window.location.origin) return '/accounts';
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return '/accounts';
-  }
-};
 
 const useStyles = createStyles(({ token }) => {
   return {
@@ -104,7 +89,10 @@ const Login: React.FC = () => {
         );
         await fetchUserInfo();
         const urlParams = new URL(window.location.href).searchParams;
-        const redirectUrl = getSafeRedirectUrl(urlParams.get('redirect'));
+        const redirectUrl = getSafeRedirectUrl(
+          urlParams.get('redirect'),
+          window.location.origin,
+        );
         window.location.href = redirectUrl;
         return;
       }

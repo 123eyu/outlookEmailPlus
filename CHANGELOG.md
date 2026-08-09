@@ -4,6 +4,11 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+### 修复 / Bug Fixes
+
+- **ZER-538 Provider 配置状态**：Cloudflare 临时邮箱仅在 Base URL、Admin Key 和可用域名均配置后显示为可用；通用 GPTMail Provider 仅在 Base URL 和 API Key 均配置后显示为可用。
+- **ZER-538 邮箱能力操作**：邮箱 DTO 保留完整的 Provider 能力元数据，并按邮箱能力禁用不支持的验证码提取和清空邮件操作；缺少旧能力元数据时保持兼容；增加组件级禁用状态测试。
+
 ## [v2.9.7] - 2026-08-09
 
 ### 修复 / Bug Fixes
