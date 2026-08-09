@@ -4,8 +4,6 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
-## [v2.9.7] - 2026-08-09
-
 ### 修复 / Bug Fixes
 
 - **ZER-538 Provider 配置状态**：Cloudflare 临时邮箱仅在 Base URL、Admin Key 和可用域名均配置后显示为可用。
