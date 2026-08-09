@@ -190,12 +190,12 @@ def build_verification_ai_input_payload(
 
 
 def _normalize_verification_ai_endpoint(base_url: str) -> str:
-    value = str(base_url or "").strip()
+    value = str(base_url or "").strip().rstrip("/")
     if not value:
         return ""
     if value.lower().endswith("/chat/completions"):
         return value
-    return value.rstrip("/") + "/chat/completions"
+    return value + "/chat/completions"
 
 
 def _normalize_verification_ai_models_endpoint(base_url: str) -> str:
@@ -266,20 +266,20 @@ def list_verification_ai_models(base_url: str, api_key: str, *, timeout: int = 8
             "latency_ms": latency_ms,
             "models": models,
         }
-    except requests.RequestException as exc:
-        return {
-            "ok": False,
-            "error": "request_failed",
-            "message": f"模型列表请求失败：{exc}",
-            "endpoint": endpoint,
-            "latency_ms": round((time.perf_counter() - started_at) * 1000),
-            "models": [],
-        }
     except (TypeError, ValueError) as exc:
         return {
             "ok": False,
             "error": "invalid_response_format",
             "message": f"模型列表响应解析失败：{exc}",
+            "endpoint": endpoint,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000),
+            "models": [],
+        }
+    except requests.RequestException as exc:
+        return {
+            "ok": False,
+            "error": "request_failed",
+            "message": f"模型列表请求失败：{exc}",
             "endpoint": endpoint,
             "latency_ms": round((time.perf_counter() - started_at) * 1000),
             "models": [],
