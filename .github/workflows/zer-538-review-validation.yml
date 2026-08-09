@@ -1,0 +1,28 @@
+name: ZER-538 Review Validation
+
+on:
+  push:
+    branches:
+      - delivery/zer-538-temp-email-ui
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ant-design-pro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ant-design-pro/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run biome:lint
+      - run: npm run tsc
+      - run: npm test
+      - run: npm run build
