@@ -124,8 +124,7 @@ def deserialize_temp_email_meta(raw_meta: Any, *, source: str | None = None) -> 
         "provider_cursor": str(meta.get("provider_cursor") or "").strip(),
         "provider_labels": [str(item).strip() for item in provider_labels if str(item or "").strip()],
         "provider_capabilities": {
-            key: bool(provider_capabilities.get(key, default))
-            for key, default in DEFAULT_PROVIDER_CAPABILITIES.items()
+            key: bool(provider_capabilities.get(key, default)) for key, default in DEFAULT_PROVIDER_CAPABILITIES.items()
         },
         "provider_debug": provider_debug,
     }
