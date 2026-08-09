@@ -137,5 +137,45 @@ class SettingsVerificationAiProbeTests(unittest.TestCase):
         self.assertEqual((probe.get("parsed_output") or {}).get("verification_code"), "123456")
 
 
+    def test_verification_ai_models_endpoint_requires_auth(self):
+        client = self.app.test_client()
+        resp = client.post("/api/settings/verification-ai-models", json={})
+        self.assertNotEqual(resp.status_code, 200)
+
+    @patch("outlook_web.services.verification_extractor.requests.get")
+    def test_verification_ai_models_returns_model_names(self, mock_get):
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "data": [
+                        {"id": "gpt-4.1-mini"},
+                        {"id": "gpt-4.1"},
+                        {"id": "gpt-4.1-mini"},
+                    ]
+                }
+
+        mock_get.return_value = _Resp()
+        client = self.app.test_client()
+        self._login(client)
+
+        resp = client.post(
+            "/api/settings/verification-ai-models",
+            json={
+                "base_url": "https://api.example.com/v1/chat/completions",
+                "api_key": "sk-current",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body.get("success"))
+        self.assertTrue(body.get("ok"))
+        self.assertEqual(body.get("models"), ["gpt-4.1", "gpt-4.1-mini"])
+        self.assertEqual(body.get("endpoint"), "https://api.example.com/v1/models")
+        mock_get.assert_called_once()
+        self.assertEqual(mock_get.call_args.args[0], "https://api.example.com/v1/models")
+
+
 if __name__ == "__main__":
     unittest.main()
