@@ -104,12 +104,51 @@ def api_reload_plugins() -> Any:
 
 def healthz() -> Any:
     """基础健康检查（用于容器/反代探活）"""
+
+    def _read_build_file(name: str) -> str:
+        try:
+            with open(name, "r", encoding="utf-8") as fh:
+                return (fh.read() or "").strip()
+        except Exception:
+            return ""
+
+    build_info = _read_build_file("/app/.build-info") or _read_build_file(".build-info")
+    info_map: dict[str, str] = {}
+    for line in build_info.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            info_map[key.strip()] = value.strip()
+
+    git_sha = (
+        os.getenv("BUILD_SHA")
+        or os.getenv("RAILWAY_GIT_COMMIT_SHA")
+        or os.getenv("GITHUB_SHA")
+        or _read_build_file("/app/.build_sha")
+        or info_map.get("sha", "")
+        or ""
+    ).strip()
+    git_branch = (
+        os.getenv("BUILD_BRANCH")
+        or os.getenv("RAILWAY_GIT_BRANCH")
+        or _read_build_file("/app/.build_branch")
+        or info_map.get("branch", "")
+        or ""
+    ).strip()
+    build_time = (
+        os.getenv("BUILD_TIME")
+        or _read_build_file("/app/.build_time")
+        or info_map.get("time", "")
+        or ""
+    ).strip()
     return (
         jsonify(
             {
                 "status": "ok",
                 "version": APP_VERSION,
                 "boot_id": _HEALTHZ_BOOT_ID,
+                "git_sha": git_sha[:12] if git_sha else "unknown",
+                "git_branch": git_branch or "unknown",
+                "build_time": build_time or "unknown",
             }
         ),
         200,

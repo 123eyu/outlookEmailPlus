@@ -7,6 +7,7 @@ All notable changes to OutlookMail Plus are documented in this file.
 ### 集成 / Integration
 
 - **#109 新前端主线回收**：将 polish 分支与功能 PR（#130/#131/#132/#133/#134/#137）统一回收到 `feat/ant-design-pro-frontend-migration`（PR #109）。Railway 测试环境源分支改绑本分支。
+- **/healthz 构建标识**：返回 `git_sha` / `git_branch` / `build_time`，便于确认 Railway 实际运行提交。
 
 ### 新增功能 / New Features
 
