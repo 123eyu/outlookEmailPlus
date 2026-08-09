@@ -96,6 +96,10 @@ export type ExternalApiKeyItem = {
   enabled?: boolean;
   pool_access?: boolean;
   allowed_emails?: string[] | string;
+  expires_at?: string;
+  expired?: boolean;
+  created_at?: string;
+  last_used_at?: string;
   note?: string;
   consumer_key?: string;
   today_total_count?: number;
@@ -104,6 +108,33 @@ export type ExternalApiKeyItem = {
   today_last_used_at?: string;
   [key: string]: any;
 };
+
+export type CreateExternalApiKeyRequest = {
+  name: string;
+  expires_in_days?: number | null;
+  allowed_emails?: string[];
+  pool_access?: boolean;
+  enabled?: boolean;
+};
+
+export type CreateExternalApiKeyResponse = {
+  success: boolean;
+  message?: string;
+  api_key?: string;
+  item?: ExternalApiKeyItem;
+  error?: any;
+};
+
+export async function createExternalApiKey(data: CreateExternalApiKeyRequest) {
+  return outlookRequest<CreateExternalApiKeyResponse>(
+    '/api/settings/external-api-keys',
+    {
+      method: 'POST',
+      data,
+      skipErrorHandler: true,
+    },
+  );
+}
 
 export async function syncCfWorkerDomains() {
   return outlookRequest<{

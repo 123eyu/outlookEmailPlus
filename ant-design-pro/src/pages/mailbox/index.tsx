@@ -34,9 +34,13 @@ import {
   Typography,
 } from 'antd';
 import type { MenuProps } from 'antd';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
+import MailboxFolderSwitch, {
+  getMailboxFolderLabel,
+} from '@/components/MailboxFolderSwitch';
 import { usePollingSettingsDraft } from '@/hooks/usePollingSettingsDraft';
+import { summarizeDualFolderPull } from '@/utils/mailboxPull';
 import { type AccountItem, fetchAccounts } from '@/services/outlook/accounts';
 import {
   deleteEmails,
@@ -78,11 +82,6 @@ import {
   saveViewMode,
 } from '@/utils/mailboxLayout';
 
-const FOLDERS: Array<{ label: string; value: EmailFolder }> = [
-  { label: '收件箱', value: 'inbox' },
-  { label: '垃圾邮件', value: 'junkemail' },
-  { label: '已删除', value: 'deleteditems' },
-];
 
 const PAGE_SIZE = 20;
 
@@ -178,6 +177,8 @@ const MailboxPage: React.FC = () => {
   const [pullingEmails, setPullingEmails] = useState<Record<string, boolean>>(
     {},
   );
+  const listRequestIdRef = useRef(0);
+  const detailRequestIdRef = useRef(0);
 
   const groupsQuery = useQuery({
     queryKey: ['mailbox-groups'],
@@ -245,6 +246,7 @@ const MailboxPage: React.FC = () => {
   const loadEmails = useCallback(
     async (opts?: { append?: boolean; nextSkip?: number }) => {
       if (!selectedEmail) return;
+      const requestId = ++listRequestIdRef.current;
       const append = !!opts?.append;
       const nextSkip = opts?.nextSkip ?? 0;
       setListLoading(true);
@@ -257,6 +259,7 @@ const MailboxPage: React.FC = () => {
           skip: nextSkip,
           top: PAGE_SIZE,
         });
+        if (requestId !== listRequestIdRef.current) return;
         if (res?.success) {
           const list = sortEmailsByNewestFirst(res.emails || []);
           setEmails((prev) =>
@@ -286,6 +289,7 @@ const MailboxPage: React.FC = () => {
           setListErrorDetails(res?.details || res?.error?.details || null);
         }
       } catch (error: any) {
+        if (requestId !== listRequestIdRef.current) return;
         const data = error?.response?.data || error?.data || error?.info;
         if (!append) {
           setEmails([]);
@@ -296,7 +300,9 @@ const MailboxPage: React.FC = () => {
         );
         setListErrorDetails(data?.details || data?.error?.details || null);
       } finally {
-        setListLoading(false);
+        if (requestId === listRequestIdRef.current) {
+          setListLoading(false);
+        }
       }
     },
     [selectedEmail, folder, method, groupId],
@@ -328,6 +334,7 @@ const MailboxPage: React.FC = () => {
 
   const openDetail = async (item: EmailListItem) => {
     if (!selectedEmail || !item?.id) return;
+    const requestId = ++detailRequestIdRef.current;
     setActiveId(item.id);
     setDetailLoading(true);
     setDetail(null);
@@ -337,32 +344,54 @@ const MailboxPage: React.FC = () => {
         method: normalizeMethodParam(method),
         folder,
       });
+      if (requestId !== detailRequestIdRef.current) return;
       if (res?.success && res.email) {
         setDetail(res.email);
       } else {
         message.error(pickEmailsErrorMessage(res, '获取邮件详情失败'));
       }
     } catch (error: any) {
+      if (requestId !== detailRequestIdRef.current) return;
       const data = error?.response?.data;
       message.error(
         pickEmailsErrorMessage(data, error?.message || '获取邮件详情失败'),
       );
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestIdRef.current) {
+        setDetailLoading(false);
+      }
     }
   };
 
   const onAccountChange = (email: string) => {
+    listRequestIdRef.current += 1;
+    detailRequestIdRef.current += 1;
     setSelectedEmail(email);
     setSkip(0);
+    setEmails([]);
+    setHasMore(false);
+    setListLoading(false);
+    setActiveId(null);
+    setDetail(null);
+    setDetailLoading(false);
+    setSelectedIds([]);
+    setTrusted(false);
     syncMailboxUrl({ account: email, folder, skip: 0, group: groupId });
   };
 
   const onGroupChange = (gid?: number) => {
+    listRequestIdRef.current += 1;
+    detailRequestIdRef.current += 1;
     setGroupId(gid);
     setSelectedEmail(undefined);
     setEmails([]);
+    setHasMore(false);
+    setListLoading(false);
+    setActiveId(null);
     setDetail(null);
+    setDetailLoading(false);
+    setSelectedIds([]);
+    setTrusted(false);
     syncMailboxUrl({
       account: undefined,
       folder,
@@ -372,8 +401,21 @@ const MailboxPage: React.FC = () => {
   };
 
   const onFolderChange = (v: EmailFolder) => {
+    if (v === folder) return;
+    listRequestIdRef.current += 1;
+    detailRequestIdRef.current += 1;
     setFolder(v);
     setSkip(0);
+    setEmails([]);
+    setHasMore(false);
+    setListLoading(false);
+    setListError(null);
+    setListErrorDetails(null);
+    setActiveId(null);
+    setDetail(null);
+    setDetailLoading(false);
+    setSelectedIds([]);
+    setTrusted(false);
     syncMailboxUrl({
       account: selectedEmail,
       folder: v,
@@ -550,17 +592,27 @@ const MailboxPage: React.FC = () => {
           top: 10,
         }),
       ]);
-      const ok = results.some(
-        (r) => r.status === 'fulfilled' && r.value?.success,
-      );
-      if (ok) {
-        message.success(`已拉取 ${email}`);
-        // 若当前选中该账号，刷新列表
-        if (selectedEmail === email && viewMode === 'standard') {
-          await loadEmails({ append: false, nextSkip: 0 });
-        }
+      const summary = summarizeDualFolderPull(results);
+      if (summary.status === 'success') {
+        message.success(`已拉取 ${email}（收件箱 + 垃圾邮件）`);
+      } else if (summary.status === 'partial') {
+        message.warning(
+          `部分拉取成功：${email}；已完成：${summary.succeededFolders.join(
+            '、',
+          )}；失败：${summary.failedFolders.join('、')}`,
+        );
       } else {
-        message.error(`拉取失败：${email}`);
+        message.error(
+          `拉取失败：${email}（${summary.failedFolders.join('、')}）`,
+        );
+      }
+      // 任一文件夹成功后，刷新当前选中的邮件列表。
+      if (
+        summary.status !== 'failure' &&
+        selectedEmail === email &&
+        viewMode === 'standard'
+      ) {
+        await loadEmails({ append: false, nextSkip: 0 });
       }
     } catch (error: any) {
       message.error(error?.message || '拉取失败');
@@ -720,6 +772,18 @@ const MailboxPage: React.FC = () => {
         <div
           style={{
             padding: '8px 10px',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          }}
+        >
+          <MailboxFolderSwitch
+            disabled={!selectedEmail}
+            value={folder}
+            onChange={onFolderChange}
+          />
+        </div>
+        <div
+          style={{
+            padding: '8px 10px',
             borderBottom: '1px solid rgba(5,5,5,0.04)',
             display: 'flex',
             gap: 8,
@@ -729,6 +793,17 @@ const MailboxPage: React.FC = () => {
         >
           <MailOutlined />
           <Typography.Text strong>邮件列表</Typography.Text>
+          <Tag
+            color={
+              folder === 'junkemail'
+                ? 'warning'
+                : folder === 'deleteditems'
+                  ? 'default'
+                  : 'processing'
+            }
+          >
+            {getMailboxFolderLabel(folder)}
+          </Tag>
           {method ? (
             <Tag color="default" variant="outlined">
               {method}
@@ -765,7 +840,11 @@ const MailboxPage: React.FC = () => {
               {filteredEmails.length === 0 && !listLoading ? (
                 <Empty
                   style={{ margin: 48 }}
-                  description={listError ? '加载失败' : '没有匹配邮件'}
+                  description={
+                    listError
+                      ? '加载失败'
+                      : `${getMailboxFolderLabel(folder)}暂无邮件`
+                  }
                 />
               ) : (
                 <List
@@ -1042,14 +1121,18 @@ const MailboxPage: React.FC = () => {
                       >
                         {snap?.verification || '验证码'}
                       </Button>,
-                      <Button
+                      <Tooltip
                         key="pull"
-                        size="small"
-                        loading={pulling}
-                        onClick={() => void pullAccountSummary(account)}
+                        title="同时拉取收件箱与垃圾邮件"
                       >
-                        拉取
-                      </Button>,
+                        <Button
+                          size="small"
+                          loading={pulling}
+                          onClick={() => void pullAccountSummary(account)}
+                        >
+                          拉取双箱
+                        </Button>
+                      </Tooltip>,
                       <Button
                         key="poll"
                         size="small"
@@ -1205,12 +1288,7 @@ const MailboxPage: React.FC = () => {
               </Button>
             </Tooltip>
           ) : null}
-          <Select
-            style={{ width: 140 }}
-            value={folder}
-            options={FOLDERS}
-            onChange={onFolderChange}
-          />
+
           <Button
             icon={<ReloadOutlined />}
             loading={listLoading || accountsQuery.isFetching}

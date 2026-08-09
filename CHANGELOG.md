@@ -4,24 +4,31 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
-## [v2.9.6] - 2026-08-08
-
 ### 新增功能 / New Features
 
-- **ZER-539 前后端性能链路观测**：统一采集页面加载、浏览器端到端 API、Flask 路由、邮件链路与真实 AI 调用耗时；新增滚动窗口聚合、P50/P95、错误率、瓶颈判断和优化建议。
-- **新前端性能看板**：概览页新增“性能链路”标签页，按服务端接口、浏览器请求和页面维度展示关键数据，并支持 30 秒自动刷新。
 
 ### 重要变更 / Important Changes
 
-- **低开销与隐私边界**：采集器使用每类 2000 条的进程内有界队列；仅保存路由模板、耗时、状态码和 trace ID，不保存查询参数、请求体、响应体、AI 端点或密钥。
-- **版本号**：后端升级至 `2.9.6`，SPA 前端升级至 `6.0.3`。
 
 ### 测试/验证 / Testing & Verification
 
-- Python 3.11 / 3.12 / 3.13 全量回归：`1647 passed`，skipped 13，覆盖率 87%。
-- Python 质量门禁：Black、isort、Flake8、复杂度检查、mypy 与 Bandit 全部通过。
-- SPA 质量门禁：Biome、TypeScript、Vitest 与生产构建全部通过。
-- 视觉验收：无头 Chrome 生成 1440×1200 与 390×844 两档性能看板截图；KPI、表格、瓶颈告警和建议区无文字或控件遮挡。
+
+### 修复 / Bug Fixes
+
+- **
+
+
+## [v2.9.7] - 2026-08-09
+
+### 修复 / Bug Fixes
+
+- **
+
+## [v2.9.6] - 2026-08-08
+
+### 优化 / Improvements
+
+- **
 
 ## [v2.9.5] - 2026-08-05
 
