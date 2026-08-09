@@ -26,6 +26,9 @@ DEFAULT_TEMP_MAIL_PROVIDER_NAME = "custom_domain_temp_mail"
 LEGACY_TEMP_MAIL_PROVIDER_NAME = "legacy_bridge"
 
 DEFAULT_PROVIDER_CAPABILITIES = {
+    "create_mailbox": True,
+    "list_messages": True,
+    "get_message_detail": True,
     "delete_mailbox": False,
     "delete_message": True,
     "clear_messages": True,
@@ -121,15 +124,8 @@ def deserialize_temp_email_meta(raw_meta: Any, *, source: str | None = None) -> 
         "provider_cursor": str(meta.get("provider_cursor") or "").strip(),
         "provider_labels": [str(item).strip() for item in provider_labels if str(item or "").strip()],
         "provider_capabilities": {
-            "delete_mailbox": bool(
-                provider_capabilities.get("delete_mailbox", DEFAULT_PROVIDER_CAPABILITIES["delete_mailbox"])
-            ),
-            "delete_message": bool(
-                provider_capabilities.get("delete_message", DEFAULT_PROVIDER_CAPABILITIES["delete_message"])
-            ),
-            "clear_messages": bool(
-                provider_capabilities.get("clear_messages", DEFAULT_PROVIDER_CAPABILITIES["clear_messages"])
-            ),
+            key: bool(provider_capabilities.get(key, default))
+            for key, default in DEFAULT_PROVIDER_CAPABILITIES.items()
         },
         "provider_debug": provider_debug,
     }
