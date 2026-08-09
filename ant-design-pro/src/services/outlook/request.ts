@@ -3,6 +3,11 @@
  */
 import { request as umiRequest } from '@umijs/max';
 import { ensureCsrfToken, clearCsrfToken } from './auth';
+import {
+  createClientTraceId,
+  finishApiMeasurement,
+  startApiMeasurement,
+} from './performance';
 
 type RequestOptions = Record<string, any>;
 
@@ -31,9 +36,17 @@ export async function outlookRequest<T = any>(
   url: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const method = String(options.method || 'GET').toUpperCase();
+  const {
+    skipPerformanceTracking = false,
+    ...requestOptions
+  }: RequestOptions = options;
+  const method = String(requestOptions.method || 'GET').toUpperCase();
+  const traceId = String(
+    requestOptions.headers?.['X-Trace-Id'] || createClientTraceId(),
+  );
   const headers: Record<string, string> = {
-    ...(options.headers || {}),
+    ...(requestOptions.headers || {}),
+    'X-Trace-Id': traceId,
   };
 
   if (MUTATING.has(method)) {
@@ -44,17 +57,24 @@ export async function outlookRequest<T = any>(
   }
 
   const finalOptions: RequestOptions = {
-    ...options,
+    ...requestOptions,
     method,
     headers,
     credentials: 'include',
   };
 
+  const startedAt = skipPerformanceTracking ? 0 : startApiMeasurement();
+  let succeeded = false;
+  let finalStatus = 0;
   try {
-    return await umiRequest<T>(url, finalOptions);
+    const result = await umiRequest<T>(url, finalOptions);
+    succeeded = true;
+    finalStatus = 200;
+    return result;
   } catch (error: any) {
-    const status = error?.response?.status;
-    const data = error?.response?.data;
+    let finalError = error;
+    let status = finalError?.response?.status;
+    let data = finalError?.response?.data;
     const msg = pickErrorMessage(data, error?.message || '');
     const looksLikeCsrf =
       status === 400 &&
@@ -67,21 +87,45 @@ export async function outlookRequest<T = any>(
       if (token) {
         headers['X-CSRFToken'] = token;
       }
-      return umiRequest<T>(url, { ...finalOptions, headers });
+      try {
+        const result = await umiRequest<T>(url, { ...finalOptions, headers });
+        succeeded = true;
+        finalStatus = 200;
+        return result;
+      } catch (retryError: any) {
+        finalError = retryError;
+        status = finalError?.response?.status;
+        data = finalError?.response?.data;
+      }
     }
 
+    finalStatus = Number(status || 0);
+    const finalMessage = pickErrorMessage(
+      data,
+      finalError?.message || msg || '请求失败',
+    );
     // 业务页常用 skipErrorHandler：把 HTTP 错误体规范化后抛出，
     // 保证 catch 侧总能读到 payload（含 502 details）。
     if (data && typeof data === 'object') {
-      const normalized: any = new Error(msg || error?.message || '请求失败');
-      normalized.name = error?.name || 'RequestError';
-      normalized.response = error?.response;
+      const normalized: any = new Error(finalMessage);
+      normalized.name = finalError?.name || 'RequestError';
+      normalized.response = finalError?.response;
       normalized.data = data;
       normalized.info = data;
       normalized.status = status;
       throw normalized;
     }
-    throw error;
+    throw finalError;
+  } finally {
+    if (!skipPerformanceTracking) {
+      finishApiMeasurement({
+        url,
+        startedAt,
+        success: succeeded,
+        status: finalStatus,
+        traceId,
+      });
+    }
   }
 }
 

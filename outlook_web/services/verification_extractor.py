@@ -18,6 +18,7 @@ import requests
 
 from outlook_web.repositories import settings as settings_repo
 from outlook_web.services import verification_code_extraction as vce
+from outlook_web.services.performance_metrics import record_ai_call
 
 # 向后兼容：旧代码从此模块导入常量与工具
 VERIFICATION_KEYWORDS = vce.VERIFICATION_KEYWORDS
@@ -379,6 +380,8 @@ def _call_verification_ai(ai_config: Dict[str, Any], ai_input: Dict[str, Any]) -
         ],
     }
 
+    started_at = time.monotonic()
+    succeeded = False
     try:
         response = requests.post(endpoint, headers=headers, json=body, timeout=6)
         response.raise_for_status()
@@ -390,10 +393,18 @@ def _call_verification_ai(ai_config: Dict[str, Any], ai_input: Dict[str, Any]) -
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str):
             return None
-        return _parse_verification_ai_content(content)
+        parsed = _parse_verification_ai_content(content)
+        succeeded = parsed is not None
+        return parsed
     except Exception as exc:
         _LOGGER.warning("verification_ai_call_failed: %s", exc)
         return None
+    finally:
+        record_ai_call(
+            success=succeeded,
+            duration_ms=(time.monotonic() - started_at) * 1000,
+            model=model,
+        )
 
 
 def probe_verification_ai_runtime(

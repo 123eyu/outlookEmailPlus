@@ -53,6 +53,11 @@ def create_blueprint() -> Blueprint:
         view_func=settings_controller.api_get_external_api_key_plaintext,
         methods=["GET"],
     )
+    bp.add_url_rule(
+        "/api/settings/external-api-keys",
+        view_func=settings_controller.api_create_external_api_key,
+        methods=["POST"],
+    )
     bp.add_url_rule("/api/settings", view_func=settings_controller.api_get_settings, methods=["GET"])
     bp.add_url_rule(
         "/api/settings",

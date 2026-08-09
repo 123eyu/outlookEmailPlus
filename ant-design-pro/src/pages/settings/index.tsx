@@ -1,6 +1,7 @@
 import {
+  CopyOutlined,
   DeleteOutlined,
-  PlusOutlined,
+  KeyOutlined,
   ReloadOutlined,
   SaveOutlined,
   SyncOutlined,
@@ -14,13 +15,16 @@ import {
   App,
   AutoComplete,
   Button,
+  Collapse,
+  Descriptions,
+  Divider,
   Form,
   Input,
   InputNumber,
+  Modal,
   Select,
   Space,
   Switch,
-  Table,
   Tabs,
   Tag,
   Typography,
@@ -32,6 +36,8 @@ import {
   useUnsavedChangesGuard,
 } from '@/hooks/useUnsavedChangesGuard';
 import {
+  createExternalApiKey,
+  type CreateExternalApiKeyResponse,
   type ExternalApiKeyItem,
   fetchDeploymentInfo,
   fetchSettings,
@@ -52,6 +58,13 @@ import {
   updateSettings,
   validateCron,
 } from '@/services/outlook/settings';
+import {
+  API_KEY_EXPIRY_OPTIONS,
+  getApiKeyExpiryLabel,
+  getApiKeyStatus,
+  getInvalidEmailScope,
+  parseEmailScope,
+} from '@/utils/apiKey';
 
 type KeyRow = ExternalApiKeyItem & { _localId: string };
 
@@ -73,7 +86,12 @@ const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { token } = theme.useToken();
   const [form] = Form.useForm();
+  const [keyForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createKeyOpen, setCreateKeyOpen] = useState(false);
+  const [createdKey, setCreatedKey] =
+    useState<CreateExternalApiKeyResponse | null>(null);
   const [dirty, setDirty] = useState(false);
   const [keyRows, setKeyRows] = useState<KeyRow[]>([]);
   const [originalKeysCanonical, setOriginalKeysCanonical] = useState('[]');
@@ -153,6 +171,7 @@ const SettingsPage: React.FC = () => {
           enabled: k.enabled !== false,
           pool_access: !!k.pool_access,
           allowed_emails: k.allowed_emails || [],
+          expires_at: k.expires_at || '',
         })),
       ),
     );
@@ -229,6 +248,7 @@ const SettingsPage: React.FC = () => {
       api_key: String(k.api_key || '').trim(),
       enabled: k.enabled !== false,
       pool_access: !!k.pool_access,
+      expires_at: k.expires_at || '',
       allowed_emails: Array.isArray(k.allowed_emails)
         ? k.allowed_emails
         : String(k.allowed_emails || '')
@@ -242,10 +262,10 @@ const SettingsPage: React.FC = () => {
     }
     for (const [i, item] of normalized.entries()) {
       if (!item.name) {
-        throw new Error(`多 Key 第 ${i + 1} 项 name 不能为空`);
+        throw new Error(`第 ${i + 1} 个 Key 的名称不能为空`);
       }
       if (item.id == null && !item.api_key) {
-        throw new Error(`多 Key「${item.name}」新建时 api_key 必填`);
+        throw new Error(`请通过「创建 Key」流程新增「${item.name}」`);
       }
     }
     return normalized;
@@ -297,7 +317,7 @@ const SettingsPage: React.FC = () => {
           payload.external_api_keys = keysPayload;
         }
       } catch (e: any) {
-        message.error(e?.message || '多 Key 配置无效');
+        message.error(e?.message || 'API Key 配置无效');
         return;
       }
 
@@ -462,6 +482,66 @@ const SettingsPage: React.FC = () => {
       rows.map((r) => (r._localId === localId ? { ...r, ...patch } : r)),
     );
     setDirty(true);
+  };
+
+  const openCreateKey = () => {
+    if (dirty) {
+      message.warning('请先保存或放弃当前更改，再创建 API Key');
+      return;
+    }
+    keyForm.resetFields();
+    keyForm.setFieldsValue({
+      expires_in_days: 90,
+      allowed_emails_text: '',
+      pool_access: false,
+      enabled: true,
+    });
+    setCreateKeyOpen(true);
+  };
+
+  const onCreateKey = async () => {
+    const values = await keyForm.validateFields().catch(() => null);
+    if (!values) return;
+
+    setCreatingKey(true);
+    try {
+      const result = await createExternalApiKey({
+        name: String(values.name || '').trim(),
+        expires_in_days:
+          Number(values.expires_in_days) > 0
+            ? Number(values.expires_in_days)
+            : null,
+        allowed_emails: parseEmailScope(values.allowed_emails_text),
+        pool_access: !!values.pool_access,
+        enabled: values.enabled !== false,
+      });
+      if (result?.success === false || !result?.api_key || !result?.item) {
+        message.error(pickSettingsError(result, '创建 API Key 失败'));
+        return;
+      }
+      setCreateKeyOpen(false);
+      setCreatedKey(result);
+      await settingsQuery.refetch();
+    } catch (error: any) {
+      message.error(
+        pickSettingsError(
+          error?.data || error?.info || error?.response?.data,
+          error?.message || '创建 API Key 失败',
+        ),
+      );
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const copyCreatedKey = async () => {
+    if (!createdKey?.api_key) return;
+    try {
+      await navigator.clipboard.writeText(createdKey.api_key);
+      message.success('API Key 已复制');
+    } catch {
+      message.error('复制失败，请手动选择并复制');
+    }
   };
 
   const reloadSettings = async () => {
@@ -873,7 +953,7 @@ const SettingsPage: React.FC = () => {
               key: 'external',
               label: '外部 API / 池',
               children: (
-                <ProCard variant="outlined">
+                <div>
                   <Form.Item
                     name="external_api_public_mode"
                     label="公网模式"
@@ -891,175 +971,203 @@ const SettingsPage: React.FC = () => {
                       style={{ width: '100%' }}
                     />
                   </Form.Item>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: 16,
+                      marginBottom: 16,
+                    }}
+                  >
+                    <div>
+                      <Typography.Title level={4} style={{ margin: 0 }}>
+                        API Keys
+                      </Typography.Title>
+                      <Typography.Paragraph
+                        type="secondary"
+                        style={{ margin: '4px 0 0' }}
+                      >
+                        创建独立 Key，并按需要设置访问范围和有效期。
+                      </Typography.Paragraph>
+                    </div>
+                    <Button
+                      type="primary"
+                      icon={<KeyOutlined />}
+                      onClick={openCreateKey}
+                    >
+                      创建 Key
+                    </Button>
+                  </div>
+
+                  {keyRows.length ? (
+                    <Space
+                      direction="vertical"
+                      size={12}
+                      style={{ display: 'flex', width: '100%', marginBottom: 20 }}
+                    >
+                      {keyRows.map((row) => {
+                        const status = getApiKeyStatus(row);
+                        const statusLabel =
+                          status === 'active'
+                            ? '启用'
+                            : status === 'expired'
+                              ? '已过期'
+                              : '停用';
+                        const statusColor =
+                          status === 'active'
+                            ? 'success'
+                            : status === 'expired'
+                              ? 'error'
+                              : 'default';
+                        const emailScope = Array.isArray(row.allowed_emails)
+                          ? row.allowed_emails
+                          : parseEmailScope(row.allowed_emails);
+
+                        return (
+                          <ProCard
+                            key={row._localId}
+                            variant="outlined"
+                            title={
+                              <Space>
+                                <KeyOutlined />
+                                <Typography.Text strong>
+                                  {row.name || '未命名 Key'}
+                                </Typography.Text>
+                              </Space>
+                            }
+                            extra={
+                              <Space>
+                                <Tag color={statusColor}>{statusLabel}</Tag>
+                                <Button
+                                  type="text"
+                                  danger
+                                  icon={<DeleteOutlined />}
+                                  title="删除 Key"
+                                  aria-label={`删除 ${row.name || '未命名 Key'}`}
+                                  onClick={() => {
+                                    setKeyRows((rows) =>
+                                      rows.filter(
+                                        (item) => item._localId !== row._localId,
+                                      ),
+                                    );
+                                    setDirty(true);
+                                  }}
+                                />
+                              </Space>
+                            }
+                          >
+                            <Descriptions
+                              size="small"
+                              column={{ xs: 1, sm: 2, lg: 3 }}
+                            >
+                              <Descriptions.Item label="Key">
+                                <Typography.Text code>
+                                  {row.api_key_masked || row.api_key || '—'}
+                                </Typography.Text>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="过期时间">
+                                {getApiKeyExpiryLabel(row)}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="最后使用">
+                                {row.last_used_at
+                                  ? String(row.last_used_at).slice(0, 10)
+                                  : '尚未使用'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="权限">
+                                {row.pool_access ? 'API + 邮箱池' : '仅 API'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="邮箱范围">
+                                {emailScope.length
+                                  ? `${emailScope.length} 个邮箱`
+                                  : '全部邮箱'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="创建时间">
+                                {row.created_at
+                                  ? String(row.created_at).slice(0, 10)
+                                  : '—'}
+                              </Descriptions.Item>
+                            </Descriptions>
+
+                            <Divider style={{ margin: '12px 0' }} />
+                            <Space wrap align="start" size={12}>
+                              <Input
+                                aria-label="Key 名称"
+                                value={row.name}
+                                style={{ width: 220 }}
+                                placeholder="Key 名称"
+                                onChange={(event) =>
+                                  updateKeyRow(row._localId, {
+                                    name: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input.TextArea
+                                aria-label="邮箱范围"
+                                autoSize={{ minRows: 1, maxRows: 3 }}
+                                value={emailScope.join('\n')}
+                                style={{ width: 300 }}
+                                placeholder="每行一个邮箱，留空表示全部邮箱"
+                                onChange={(event) =>
+                                  updateKeyRow(row._localId, {
+                                    allowed_emails: event.target.value
+                                      .split(/[\n,]/)
+                                      .map((email) => email.trim())
+                                      .filter(Boolean),
+                                  })
+                                }
+                              />
+                              <Space>
+                                <Typography.Text>邮箱池</Typography.Text>
+                                <Switch
+                                  checked={!!row.pool_access}
+                                  onChange={(checked) =>
+                                    updateKeyRow(row._localId, {
+                                      pool_access: checked,
+                                    })
+                                  }
+                                />
+                              </Space>
+                              <Space>
+                                <Typography.Text>启用</Typography.Text>
+                                <Switch
+                                  checked={row.enabled !== false}
+                                  onChange={(checked) =>
+                                    updateKeyRow(row._localId, {
+                                      enabled: checked,
+                                    })
+                                  }
+                                />
+                              </Space>
+                            </Space>
+                          </ProCard>
+                        );
+                      })}
+                    </Space>
+                  ) : (
+                    <Alert
+                      type="info"
+                      showIcon
+                      message="尚未创建 API Key"
+                      description="创建后，Key 的状态、权限和过期时间会显示在这里。"
+                      style={{ marginBottom: 20 }}
+                    />
+                  )}
+
                   <Form.Item
                     name="external_api_key"
-                    label="对外 API Key（单 Key 兼容）"
+                    label="旧版兼容 Key"
                     extra={
                       sMeta.external_api_key_set
-                        ? `已设置：${sMeta.external_api_key_masked || ''}`
-                        : '未设置'
+                        ? `仅供旧客户端使用，当前值：${sMeta.external_api_key_masked || ''}`
+                        : '仅供仍使用单 Key 配置的旧客户端；新接入请使用上方创建流程。'
                     }
                   >
                     <Input.Password
                       visibilityToggle
-                      placeholder="输入新 Key 以更新"
+                      placeholder="输入新值以更新旧版兼容 Key"
                     />
                   </Form.Item>
-
-                  <Typography.Title level={5}>
-                    多 Key（external_api_keys）
-                  </Typography.Title>
-                  <Typography.Paragraph
-                    type="secondary"
-                    style={{ marginTop: 0 }}
-                  >
-                    保留脱敏 api_key 表示不修改；新建必须填明文
-                    Key；保存时若未改动则不提交本字段。
-                  </Typography.Paragraph>
-                  <Table<KeyRow>
-                    size="small"
-                    rowKey="_localId"
-                    pagination={false}
-                    style={{ marginBottom: 12 }}
-                    dataSource={keyRows}
-                    columns={[
-                      {
-                        title: '名称',
-                        dataIndex: 'name',
-                        width: 140,
-                        render: (_, row) => (
-                          <Input
-                            size="small"
-                            value={row.name}
-                            onChange={(e) =>
-                              updateKeyRow(row._localId, {
-                                name: e.target.value,
-                              })
-                            }
-                          />
-                        ),
-                      },
-                      {
-                        title: 'API Key',
-                        dataIndex: 'api_key',
-                        render: (_, row) => (
-                          <Input.Password
-                            size="small"
-                            value={row.api_key}
-                            placeholder="脱敏保留=不改"
-                            onChange={(e) =>
-                              updateKeyRow(row._localId, {
-                                api_key: e.target.value,
-                              })
-                            }
-                          />
-                        ),
-                      },
-                      {
-                        title: '邮箱范围',
-                        dataIndex: 'allowed_emails',
-                        width: 180,
-                        render: (_, row) => (
-                          <Input.TextArea
-                            size="small"
-                            rows={2}
-                            value={
-                              Array.isArray(row.allowed_emails)
-                                ? row.allowed_emails.join('\n')
-                                : String(row.allowed_emails || '')
-                            }
-                            placeholder="每行一个邮箱，空=不限"
-                            onChange={(e) =>
-                              updateKeyRow(row._localId, {
-                                allowed_emails: e.target.value
-                                  .split(/[\n,]/)
-                                  .map((x) => x.trim())
-                                  .filter(Boolean),
-                              })
-                            }
-                          />
-                        ),
-                      },
-                      {
-                        title: '池权限',
-                        dataIndex: 'pool_access',
-                        width: 80,
-                        render: (_, row) => (
-                          <Switch
-                            size="small"
-                            checked={!!row.pool_access}
-                            onChange={(v) =>
-                              updateKeyRow(row._localId, { pool_access: v })
-                            }
-                          />
-                        ),
-                      },
-                      {
-                        title: '启用',
-                        dataIndex: 'enabled',
-                        width: 70,
-                        render: (_, row) => (
-                          <Switch
-                            size="small"
-                            checked={row.enabled !== false}
-                            onChange={(v) =>
-                              updateKeyRow(row._localId, { enabled: v })
-                            }
-                          />
-                        ),
-                      },
-                      {
-                        title: '',
-                        width: 48,
-                        render: (_, row) => (
-                          <Button
-                            type="text"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={() => {
-                              setKeyRows((rows) =>
-                                rows.filter((r) => r._localId !== row._localId),
-                              );
-                              setDirty(true);
-                            }}
-                          />
-                        ),
-                      },
-                    ]}
-                  />
-                  <Button
-                    type="dashed"
-                    icon={<PlusOutlined />}
-                    style={{ marginBottom: 16 }}
-                    onClick={() => {
-                      setKeyRows((rows) => [
-                        ...rows,
-                        {
-                          _localId: newLocalId(),
-                          name: '',
-                          api_key: '',
-                          enabled: true,
-                          pool_access: false,
-                          allowed_emails: [],
-                        },
-                      ]);
-                      setDirty(true);
-                    }}
-                  >
-                    添加 Key
-                  </Button>
-                  <Button
-                    danger
-                    type="link"
-                    onClick={() => {
-                      setKeyRows([]);
-                      setDirty(true);
-                    }}
-                    disabled={!keyRows.length}
-                  >
-                    清空全部多 Key
-                  </Button>
 
                   <Form.Item
                     name="external_api_ip_whitelist_text"
@@ -1181,7 +1289,7 @@ const SettingsPage: React.FC = () => {
                       </Typography.Text>
                     ) : null}
                   </Space>
-                </ProCard>
+                </div>
               ),
             },
             {
@@ -1357,6 +1465,143 @@ const SettingsPage: React.FC = () => {
           </Space>
         </div>
       </Form>
+
+      <Modal
+        title="创建 API Key"
+        open={createKeyOpen}
+        okText="创建 Key"
+        cancelText="取消"
+        confirmLoading={creatingKey}
+        destroyOnHidden
+        onOk={() => void onCreateKey()}
+        onCancel={() => setCreateKeyOpen(false)}
+      >
+        <Typography.Paragraph type="secondary">
+          提供名称和过期时间即可。Key 将由系统安全生成，并在创建后显示一次。
+        </Typography.Paragraph>
+        <Form form={keyForm} layout="vertical" requiredMark="optional">
+          <Form.Item
+            name="name"
+            label="Key 名称"
+            rules={[
+              { required: true, whitespace: true, message: '请输入 Key 名称' },
+              { max: 100, message: 'Key 名称不能超过 100 个字符' },
+            ]}
+          >
+            <Input autoFocus placeholder="例如：生产自动化" />
+          </Form.Item>
+          <Form.Item
+            name="expires_in_days"
+            label="过期时间"
+            rules={[{ required: true, message: '请选择过期时间' }]}
+          >
+            <Select options={API_KEY_EXPIRY_OPTIONS} />
+          </Form.Item>
+          <Collapse
+            ghost
+            items={[
+              {
+                key: 'scope',
+                label: '访问范围（可选）',
+                children: (
+                  <>
+                    <Form.Item
+                      name="allowed_emails_text"
+                      label="邮箱范围"
+                      extra="每行一个邮箱；留空表示全部邮箱"
+                      rules={[
+                        {
+                          validator: async (_, value) => {
+                            const invalid = getInvalidEmailScope(value);
+                            if (invalid.length) {
+                              throw new Error(`邮箱地址无效：${invalid[0]}`);
+                            }
+                          },
+                        },
+                      ]}
+                    >
+                      <Input.TextArea
+                        rows={3}
+                        placeholder="user@example.com"
+                      />
+                    </Form.Item>
+                    <Space size="large">
+                      <Form.Item
+                        name="pool_access"
+                        label="邮箱池权限"
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Form.Item
+                        name="enabled"
+                        label="创建后启用"
+                        valuePropName="checked"
+                      >
+                        <Switch />
+                      </Form.Item>
+                    </Space>
+                  </>
+                ),
+              },
+            ]}
+          />
+        </Form>
+      </Modal>
+
+      <Modal
+        title="API Key 已创建"
+        open={!!createdKey}
+        maskClosable={false}
+        destroyOnHidden
+        onCancel={() => setCreatedKey(null)}
+        footer={[
+          <Button
+            key="copy"
+            type="primary"
+            icon={<CopyOutlined />}
+            onClick={() => void copyCreatedKey()}
+          >
+            复制 Key
+          </Button>,
+          <Button key="done" onClick={() => setCreatedKey(null)}>
+            完成
+          </Button>,
+        ]}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="请立即复制并妥善保存"
+          description="关闭后将无法再次查看完整 Key；列表中只会保留脱敏值。"
+          style={{ marginBottom: 16 }}
+        />
+        <ProCard variant="outlined">
+          <Descriptions size="small" column={1}>
+            <Descriptions.Item label="名称">
+              {createdKey?.item?.name || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="过期时间">
+              {getApiKeyExpiryLabel(createdKey?.item || {})}
+            </Descriptions.Item>
+            <Descriptions.Item label="权限">
+              {createdKey?.item?.pool_access ? 'API + 邮箱池' : '仅 API'}
+            </Descriptions.Item>
+            <Descriptions.Item label="邮箱范围">
+              {Array.isArray(createdKey?.item?.allowed_emails) &&
+              createdKey.item.allowed_emails.length
+                ? createdKey.item.allowed_emails.join(', ')
+                : '全部邮箱'}
+            </Descriptions.Item>
+          </Descriptions>
+          <Divider style={{ margin: '12px 0' }} />
+          <Input.Password
+            value={createdKey?.api_key || ''}
+            readOnly
+            visibilityToggle
+          />
+        </ProCard>
+      </Modal>
     </PageContainer>
   );
 };
