@@ -18,6 +18,11 @@ export type AccountItem = {
   last_refresh_at?: string | null;
   last_refresh_status?: string | null;
   last_refresh_error?: string | null;
+  latest_email_subject?: string;
+  latest_email_from?: string;
+  latest_email_folder?: string;
+  latest_email_received_at?: string;
+  latest_verification_code?: string;
   created_at?: string;
   updated_at?: string;
 };

@@ -149,7 +149,10 @@ export default defineConfig({
     configProvider: {
       theme: {
         token: {
-          fontFamily: 'AlibabaSans, sans-serif',
+          // 与 global.less body 字体栈保持一致，避免个别组件回退到不同的
+          // sans-serif 默认字体造成同页字体不一致（如账号管理删除项）
+          fontFamily:
+            "AlibabaSans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'",
         },
       },
     },

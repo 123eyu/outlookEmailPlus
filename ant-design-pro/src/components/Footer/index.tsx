@@ -1,29 +1,11 @@
 import { GithubOutlined } from '@ant-design/icons';
-import packageJson from '@root/package.json';
 import { useQuery } from '@tanstack/react-query';
 import { Divider } from 'antd';
 import { createStyles } from 'antd-style';
 import React from 'react';
 import { fetchHealth } from '@/services/outlook/settings';
+import { REPO_URL } from '@/utils/repoUrl';
 
-const FALLBACK_REPO = 'https://github.com/ZeroPointSix/outlookEmailPlus';
-
-const getRepoUrl = () => {
-  if (!packageJson.repository) return FALLBACK_REPO;
-  const repo =
-    typeof packageJson.repository === 'string'
-      ? packageJson.repository
-      : (packageJson.repository as { url: string }).url;
-  const match = repo.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
-  if (!match) return FALLBACK_REPO;
-  const owner = match[1];
-  const name = match[2];
-  // 避免回退到 ant-design-pro 脚手架仓库
-  if (owner === 'ant-design' && name === 'ant-design-pro') return FALLBACK_REPO;
-  return `https://github.com/${owner}/${name}`;
-};
-
-const REPO_URL = getRepoUrl();
 const COMMIT_HASH = process.env.COMMIT_HASH || '';
 
 const useStyles = createStyles(({ token, css }) => ({

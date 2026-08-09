@@ -710,7 +710,7 @@ const SettingsPage: React.FC = () => {
                     name="enable_auto_polling"
                     label="自动轮询（后端配置）"
                     valuePropName="checked"
-                    extra="持久化设置；SPA 侧在邮箱页手动启动监听"
+                    extra="持久化设置；开启后邮箱页选中账号自动开始监听，复制邮箱地址也会触发监听"
                   >
                     <Switch />
                   </Form.Item>

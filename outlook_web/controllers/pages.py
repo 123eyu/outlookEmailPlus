@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from flask import g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from flask import abort, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from outlook_web import spa as spa_support
 from outlook_web.errors import build_error_payload
@@ -168,15 +168,29 @@ def api_logout() -> Any:
 
 
 def image_asset(filename: str) -> Any:
-    """提供仓库 img/ 目录中的静态图片资源。"""
+    """提供仓库 img/ 目录中的静态图片资源。
+
+    Docker 部署镜像通过 .dockerignore 排除了仓库 img/ 目录，
+    仓库内文件缺失时回退到 SPA 构建产物（ant-design-pro/public/img/），
+    保证新前端的 logo 等资源始终可加载。
+    """
     img_dir = Path(__file__).resolve().parents[2] / "img"
-    return send_from_directory(str(img_dir), filename)
+    try:
+        resolved = (img_dir / filename).resolve()
+        resolved.relative_to(img_dir.resolve())
+    except (OSError, ValueError):
+        resolved = None
+    if resolved is not None and resolved.is_file():
+        return send_from_directory(str(img_dir), filename)
+    spa_response = spa_support.send_spa_file(f"img/{filename}")
+    if spa_response is not None:
+        return spa_response
+    abort(404)
 
 
 def favicon() -> Any:
-    """站点 favicon，复用 img/ico.png。"""
-    img_dir = Path(__file__).resolve().parents[2] / "img"
-    return send_from_directory(str(img_dir), "ico.png", mimetype="image/png")
+    """站点 favicon，复用 img/ico.png；仓库 img/ 缺失时回退 SPA 构建产物。"""
+    return image_asset("ico.png")
 
 
 @login_required
