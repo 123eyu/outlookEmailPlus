@@ -83,6 +83,79 @@ class PerformanceMetricsTests(unittest.TestCase):
             "/api/emails/:id",
         )
         self.assertEqual(normalize_metric_name("/api/items/123"), "/api/items/:id")
+        self.assertEqual(
+            normalize_metric_name("/api/emails/customer-slug/private-message"),
+            "/api/emails/:id/:id",
+        )
+        self.assertEqual(normalize_metric_name("/mailbox/alice"), "/mailbox/:id")
+
+    def test_snapshot_excludes_self_observation_routes(self) -> None:
+        for route in ("/api/performance/client", "/api/overview/performance"):
+            record_server_request(
+                route=route,
+                method="GET",
+                status=200,
+                duration_ms=25,
+                trace_id="self-observation",
+            )
+        self.assertEqual(
+            get_performance_snapshot()["summary"]["backend_api"]["count"], 0
+        )
+
+    def test_frontend_overhead_uses_unique_trace_and_matching_endpoint(self) -> None:
+        for index in range(3):
+            trace_id = f"matched-{index}"
+            record_server_request(
+                route="/api/emails/<string:account_id>",
+                method="GET",
+                status=200,
+                duration_ms=200,
+                trace_id=trace_id,
+            )
+            record_client_metrics(
+                [
+                    {
+                        "kind": "api",
+                        "name": f"/api/emails/customer-{index}",
+                        "duration_ms": 900,
+                        "status": 200,
+                        "success": True,
+                        "trace_id": trace_id,
+                    }
+                ]
+            )
+
+        record_server_request(
+            route="/api/accounts/<string:account_id>",
+            method="GET",
+            status=200,
+            duration_ms=100,
+            trace_id="wrong-endpoint",
+        )
+        record_client_metrics(
+            [
+                {
+                    "kind": "api",
+                    "name": "/api/emails/customer-x",
+                    "duration_ms": 5000,
+                    "status": 200,
+                    "success": True,
+                    "trace_id": "wrong-endpoint",
+                }
+            ]
+        )
+
+        snapshot = get_performance_snapshot()
+        overhead = snapshot["summary"]["frontend_overhead"]
+        self.assertEqual(overhead["count"], 3)
+        self.assertEqual(overhead["p95_ms"], 700.0)
+        findings = [
+            item
+            for item in snapshot["bottlenecks"]
+            if item["layer"] == "前端/网络"
+        ]
+        self.assertEqual(len(findings), 1)
+        self.assertIn("3 条唯一 trace", findings[0]["evidence"])
 
 
 @unittest.skipIf(Flask is None, "Flask is not installed")
@@ -112,7 +185,7 @@ class PerformanceMiddlewareTests(unittest.TestCase):
         self.assertIn("X-Response-Time-Ms", response.headers)
         self.assertIn("app;dur=", response.headers["Server-Timing"])
         endpoints = get_performance_snapshot()["endpoints"]
-        self.assertEqual(endpoints[0]["name"], "/api/items/<int:item_id>")
+        self.assertEqual(endpoints[0]["name"], "/api/items/:id")
 
 
 if __name__ == "__main__":

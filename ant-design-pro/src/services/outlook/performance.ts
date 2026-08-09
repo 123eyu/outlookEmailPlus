@@ -20,6 +20,46 @@ const MAX_BATCH_SIZE = 50;
 const FLUSH_DELAY_MS = 2000;
 const MAX_RETRY_DELAY_MS = 30_000;
 const PAGE_SETTLE_MS = 500;
+const SAFE_PATH_SEGMENTS = new Set([
+  'api',
+  'accounts',
+  'activity',
+  'audit',
+  'audit-logs',
+  'auth',
+  'client',
+  'csrf-token',
+  'current-user',
+  'emails',
+  'export',
+  'export-selected',
+  'external-api',
+  'groups',
+  'healthz',
+  'import',
+  'items',
+  'logout',
+  'mailbox',
+  'options',
+  'overview',
+  'performance',
+  'plugins',
+  'pool',
+  'pool-admin',
+  'providers',
+  'refresh',
+  'refresh-log',
+  'refresh-logs',
+  'settings',
+  'status',
+  'summary',
+  'tags',
+  'temp-emails',
+  'token-tool',
+  'user',
+  'verification',
+  'verify',
+]);
 
 let queue: ClientPerformanceMetric[] = [];
 let flushTimer: number | undefined;
@@ -40,11 +80,7 @@ export function normalizeMetricName(value: string): string {
   return raw
     .split('/')
     .map((part) =>
-      /^(?:\d+|[0-9a-f]{16,}|[0-9a-f]{8}-[0-9a-f-]{27,}|[^/]*@[^/]*)$/i.test(
-        part,
-      )
-        ? ':id'
-        : part,
+      !part || SAFE_PATH_SEGMENTS.has(part.toLowerCase()) ? part : ':id',
     )
     .join('/')
     .slice(0, 160);

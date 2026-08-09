@@ -24,20 +24,62 @@ _CLIENT_METRICS: deque[dict[str, Any]] = deque(maxlen=_MAX_METRICS)
 _AI_METRICS: deque[dict[str, Any]] = deque(maxlen=_MAX_METRICS)
 _LOCK = threading.Lock()
 
-_DYNAMIC_SEGMENT = re.compile(
-    r"^(?:\d+|[0-9a-f]{16,}|[0-9a-f]{8}-[0-9a-f-]{27,}|[^/]*@[^/]*)$",
-    re.IGNORECASE,
-)
+_ROUTE_PARAMETER = re.compile(r"^<(?:(?:[^:>]+):)?[^>]+>$")
+_SAFE_PATH_SEGMENTS = {
+    "api",
+    "accounts",
+    "activity",
+    "audit",
+    "audit-logs",
+    "auth",
+    "client",
+    "csrf-token",
+    "current-user",
+    "emails",
+    "export",
+    "export-selected",
+    "external-api",
+    "groups",
+    "healthz",
+    "import",
+    "items",
+    "logout",
+    "mailbox",
+    "options",
+    "overview",
+    "performance",
+    "plugins",
+    "pool",
+    "pool-admin",
+    "providers",
+    "refresh",
+    "refresh-log",
+    "refresh-logs",
+    "settings",
+    "status",
+    "summary",
+    "tags",
+    "temp-emails",
+    "token-tool",
+    "user",
+    "verification",
+    "verify",
+}
+_IGNORED_SERVER_ROUTES = {"/api/performance/client", "/api/overview/performance"}
 
 
 def normalize_metric_name(value: Any) -> str:
-    """移除查询参数并收敛动态路径段，防止高基数和敏感信息进入指标。"""
+    """仅保留已知静态段，避免未知 ID、用户名或 slug 进入指标。"""
     raw = str(value or "unknown").strip().split("?", 1)[0].split("#", 1)[0]
     if not raw:
         return "unknown"
     if not raw.startswith("/"):
         return raw[:120]
-    segments = [":id" if _DYNAMIC_SEGMENT.match(part) else part for part in raw.split("/")]
+    segments = [
+        part if not part or part.lower() in _SAFE_PATH_SEGMENTS else ":id"
+        for part in raw.split("/")
+    ]
+    segments = [":id" if _ROUTE_PARAMETER.match(part) else part for part in segments]
     return "/".join(segments)[:160]
 
 
@@ -64,7 +106,10 @@ def record_server_request(
     if duration is None:
         return
     normalized_route = normalize_metric_name(route)
-    if normalized_route.startswith("/static/") or normalized_route == "/api/performance/client":
+    if (
+        normalized_route.startswith("/static/")
+        or normalized_route in _IGNORED_SERVER_ROUTES
+    ):
         return
     try:
         status_code = int(status)
@@ -181,6 +226,40 @@ def _grouped_summary(
     return rows[:limit]
 
 
+def _paired_frontend_overhead(
+    server: list[dict[str, Any]], client_api: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Aggregate only unique trace pairs that refer to the same endpoint."""
+    server_by_trace: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    client_by_trace: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in server:
+        if item.get("trace_id"):
+            server_by_trace[item["trace_id"]].append(item)
+    for item in client_api:
+        if item.get("trace_id"):
+            client_by_trace[item["trace_id"]].append(item)
+
+    paired: list[dict[str, Any]] = []
+    for trace_id, client_items in client_by_trace.items():
+        server_items = server_by_trace.get(trace_id, [])
+        if len(client_items) != 1 or len(server_items) != 1:
+            continue
+        client_item = client_items[0]
+        server_item = server_items[0]
+        if client_item["name"] != server_item["route"]:
+            continue
+        paired.append(
+            {
+                "duration_ms": max(
+                    0.0,
+                    float(client_item["duration_ms"]) - float(server_item["duration_ms"]),
+                ),
+                "success": bool(client_item.get("success") and server_item.get("success")),
+            }
+        )
+    return _metric_summary(paired, source="trace_matched_frontend_overhead")
+
+
 def _finding(*, layer: str, severity: str, title: str, evidence: str, recommendation: str) -> dict[str, str]:
     return {
         "layer": layer,
@@ -217,6 +296,7 @@ def get_performance_snapshot(window_seconds: int = _DEFAULT_WINDOW_SECONDS) -> d
     page_summary = _metric_summary(page, source="browser")
     mail_summary = _metric_summary(mail, source=mail_source)
     ai_summary = _metric_summary(ai, source="server_external_call")
+    frontend_overhead_summary = _paired_frontend_overhead(server, client_api)
 
     findings: list[dict[str, str]] = []
     if backend_summary["count"] and backend_summary["p95_ms"] >= 1000:
@@ -229,18 +309,19 @@ def get_performance_snapshot(window_seconds: int = _DEFAULT_WINDOW_SECONDS) -> d
                 recommendation="优先检查端点分布中 P95 最高的接口及其数据库、Graph 调用日志。",
             )
         )
-    if frontend_summary["count"] and backend_summary["count"]:
-        overhead = frontend_summary["p95_ms"] - backend_summary["p95_ms"]
-        if overhead >= 500:
-            findings.append(
-                _finding(
-                    layer="前端/网络",
-                    severity="medium",
-                    title="浏览器端到端耗时明显高于服务端",
-                    evidence=f"浏览器与服务端 API P95 相差约 {overhead:.0f} ms",
-                    recommendation="检查请求瀑布、代理链路、资源竞争和响应反序列化耗时。",
-                )
+    if frontend_overhead_summary["count"] >= 3 and frontend_overhead_summary["p95_ms"] >= 500:
+        findings.append(
+            _finding(
+                layer="前端/网络",
+                severity="medium",
+                title="配对链路的前端/网络开销偏高",
+                evidence=(
+                    f"{frontend_overhead_summary['count']} 条唯一 trace 配对的开销 P95 "
+                    f"为 {frontend_overhead_summary['p95_ms']:.0f} ms"
+                ),
+                recommendation="检查请求瀑布、代理链路、资源竞争和响应反序列化耗时。",
             )
+        )
     if page_summary["count"] and page_summary["p95_ms"] >= 2500:
         findings.append(
             _finding(
@@ -300,6 +381,7 @@ def get_performance_snapshot(window_seconds: int = _DEFAULT_WINDOW_SECONDS) -> d
         "summary": {
             "backend_api": backend_summary,
             "frontend_api": frontend_summary,
+            "frontend_overhead": frontend_overhead_summary,
             "page": page_summary,
             "mail": mail_summary,
             "ai": ai_summary,

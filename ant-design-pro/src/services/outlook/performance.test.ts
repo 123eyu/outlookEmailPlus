@@ -9,6 +9,10 @@ describe('performance metrics', () => {
     expect(normalizeMetricName('/emails/person@example.com')).toBe(
       '/emails/:id',
     );
+    expect(normalizeMetricName('/api/emails/customer-slug/private-message')).toBe(
+      '/api/emails/:id/:id',
+    );
+    expect(normalizeMetricName('/mailbox/alice')).toBe('/mailbox/:id');
   });
 
   it('creates a non-empty client trace id', () => {

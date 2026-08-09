@@ -167,6 +167,7 @@ export type OverviewPerformance = {
   summary?: {
     backend_api?: PerformanceMetricSummary;
     frontend_api?: PerformanceMetricSummary;
+    frontend_overhead?: PerformanceMetricSummary;
     page?: PerformanceMetricSummary;
     mail?: PerformanceMetricSummary;
     ai?: PerformanceMetricSummary;
@@ -217,5 +218,6 @@ export async function fetchOverviewActivity() {
 export async function fetchOverviewPerformance() {
   return outlookRequest<OverviewPerformance>('/api/overview/performance', {
     method: 'GET',
+    skipPerformanceTracking: true,
   });
 }
