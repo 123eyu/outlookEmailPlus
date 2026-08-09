@@ -13,6 +13,7 @@ import { useIntl } from '@umijs/max';
 import {
   Alert,
   App,
+  AutoComplete,
   Button,
   Collapse,
   Descriptions,
@@ -40,6 +41,8 @@ import {
   type ExternalApiKeyItem,
   fetchDeploymentInfo,
   fetchSettings,
+  fetchVerificationAiModels,
+  type VerificationAiTestResponse,
   normalizePollingSettings,
   POLLING_COUNT_MAX,
   POLLING_COUNT_MIN,
@@ -68,6 +71,15 @@ type KeyRow = ExternalApiKeyItem & { _localId: string };
 const newLocalId = () =>
   `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+const describeAiError = (error?: string) =>
+  ({
+    config_incomplete: '配置不完整，请检查 Base URL、API Key 和模型。',
+    request_failed: '网络、DNS 或超时失败，请确认服务地址可从服务器访问。',
+    http_error: '服务返回错误，请检查 API Key、模型名称、额度和 URL。',
+    invalid_response_format: '服务可访问，但响应格式不是兼容的 OpenAI 格式。',
+    invalid_ai_output: '服务可访问，但模型输出不符合验证码提取契约。',
+  })[error || ''] || '连接失败，请根据下方状态与端点信息排查。';
+
 const SettingsPage: React.FC = () => {
   const { message, modal } = App.useApp();
   const intl = useIntl();
@@ -89,6 +101,11 @@ const SettingsPage: React.FC = () => {
   const [deploymentLoading, setDeploymentLoading] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
   const [cfSyncLoading, setCfSyncLoading] = useState(false);
+  const [aiModels, setAiModels] = useState<string[]>([]);
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
+  const [aiTestResult, setAiTestResult] =
+    useState<VerificationAiTestResponse | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -322,6 +339,62 @@ const SettingsPage: React.FC = () => {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const getVerificationAiPayload = () => ({
+    enabled: form.getFieldValue('verification_ai_enabled'),
+    base_url: String(
+      form.getFieldValue('verification_ai_base_url') || '',
+    ).trim(),
+    model: String(form.getFieldValue('verification_ai_model') || '').trim(),
+    api_key: String(
+      form.getFieldValue('verification_ai_api_key') || '',
+    ).trim(),
+  });
+
+  const loadVerificationAiModels = async () => {
+    const payload = getVerificationAiPayload();
+    if (!payload.base_url || !payload.api_key) {
+      message.error('请先填写 Base URL 和 API Key');
+      return;
+    }
+    setAiModelsLoading(true);
+    try {
+      const res = await fetchVerificationAiModels(payload);
+      if (!res?.ok) {
+        message.error(res?.message || '模型列表加载失败');
+        return;
+      }
+      setAiModels(res.models || []);
+      message.success(res.message || '模型列表已加载');
+    } catch (error: any) {
+      message.error(error?.message || '模型列表加载失败');
+    } finally {
+      setAiModelsLoading(false);
+    }
+  };
+
+  const testVerificationAiConnection = async () => {
+    const payload = getVerificationAiPayload();
+    if (!payload.base_url || !payload.api_key || !payload.model) {
+      message.error('请先填写 Base URL、API Key 和模型');
+      return;
+    }
+    setAiTestLoading(true);
+    setAiTestResult(null);
+    try {
+      const res = await testVerificationAi(payload);
+      setAiTestResult(res);
+      if (res?.ok) {
+        message.success('AI 连通性正常');
+      } else {
+        message.error(res?.probe?.message || describeAiError(res?.probe?.error));
+      }
+    } catch (error: any) {
+      message.error(error?.message || 'AI 连通性测试失败');
+    } finally {
+      setAiTestLoading(false);
     }
   };
 
@@ -784,11 +857,26 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="verification_ai_base_url" label="Base URL">
-                    <Input />
+                  <Form.Item
+                    name="verification_ai_base_url"
+                    label="Base URL"
+                    extra="填写兼容 API 根地址（如 https://api.openai.com/v1）；系统会自动使用 /models 和 /chat/completions。也可直接填写完整 /chat/completions 地址。"
+                  >
+                    <Input placeholder="https://api.openai.com/v1" />
                   </Form.Item>
                   <Form.Item name="verification_ai_model" label="模型">
-                    <Input />
+                    <AutoComplete
+                      options={aiModels.map((model) => ({
+                        label: model,
+                        value: model,
+                      }))}
+                      placeholder="输入模型名，或加载服务端模型列表"
+                      filterOption={(inputValue, option) =>
+                        String(option?.value || '')
+                          .toLowerCase()
+                          .includes(inputValue.toLowerCase())
+                      }
+                    />
                   </Form.Item>
                   <Form.Item
                     name="verification_ai_api_key"
@@ -804,16 +892,60 @@ const SettingsPage: React.FC = () => {
                       placeholder="输入新 Key 以更新"
                     />
                   </Form.Item>
-                  <Button
-                    onClick={() =>
-                      void runTest(
-                        () => testVerificationAi({}),
-                        'AI 连通性正常',
-                      )
-                    }
-                  >
-                    测试 AI
-                  </Button>
+                  <Space wrap>
+                    <Button
+                      icon={<ReloadOutlined />}
+                      loading={aiModelsLoading}
+                      onClick={() => void loadVerificationAiModels()}
+                    >
+                      加载模型
+                    </Button>
+                    <Button
+                      type="primary"
+                      loading={aiTestLoading}
+                      onClick={() => void testVerificationAiConnection()}
+                    >
+                      测试 AI
+                    </Button>
+                  </Space>
+                  {aiTestResult && (
+                    <Alert
+                      showIcon
+                      style={{ marginTop: 16 }}
+                      type={aiTestResult.ok ? 'success' : 'error'}
+                      message={
+                        aiTestResult.ok
+                          ? '连接成功'
+                          : aiTestResult.probe?.message ||
+                            describeAiError(aiTestResult.probe?.error)
+                      }
+                      description={
+                        <Space direction="vertical" size={2}>
+                          {!aiTestResult.ok && (
+                            <Typography.Text>
+                              {describeAiError(aiTestResult.probe?.error)}
+                            </Typography.Text>
+                          )}
+                          <Typography.Text>
+                            模型：{aiTestResult.probe?.model || '未返回'}
+                          </Typography.Text>
+                          <Typography.Text>
+                            延迟：
+                            {aiTestResult.probe?.latency_ms != null
+                              ? `${aiTestResult.probe.latency_ms} ms`
+                              : '未返回'}
+                          </Typography.Text>
+                          <Typography.Text>
+                            HTTP：
+                            {aiTestResult.probe?.http_status ?? '未返回'}
+                          </Typography.Text>
+                          <Typography.Text code>
+                            {aiTestResult.probe?.endpoint || '未生成请求端点'}
+                          </Typography.Text>
+                        </Space>
+                      }
+                    />
+                  )}
                 </ProCard>
               ),
             },

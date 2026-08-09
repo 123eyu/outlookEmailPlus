@@ -39,6 +39,11 @@ def create_blueprint() -> Blueprint:
         methods=["POST"],
     )
     bp.add_url_rule(
+        "/api/settings/verification-ai-models",
+        view_func=settings_controller.api_list_verification_ai_models,
+        methods=["POST"],
+    )
+    bp.add_url_rule(
         "/api/settings/cf-worker-sync-domains",
         view_func=settings_controller.api_sync_cf_worker_domains,
         methods=["POST"],

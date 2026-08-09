@@ -22,7 +22,10 @@ from outlook_web.security.crypto import (
     is_encrypted,
 )
 from outlook_web.services import webhook_push
-from outlook_web.services.verification_extractor import probe_verification_ai_runtime
+from outlook_web.services.verification_extractor import (
+    list_verification_ai_models,
+    probe_verification_ai_runtime,
+)
 
 # ==================== 设置 API ====================
 
@@ -1415,14 +1418,18 @@ def api_test_webhook() -> Any:
 
 @login_required
 def api_test_verification_ai() -> Any:
-    """测试已保存的系统级验证码 AI 配置可用性（连通性优先）。"""
+    """测试系统级验证码 AI 配置可用性（连通性优先）。"""
     data = request.get_json(silent=True) or {}
 
+    saved_api_key = settings_repo.get_verification_ai_api_key()
+    submitted_api_key = str(data.get("api_key") or "").strip()
+    if not submitted_api_key or "*" in submitted_api_key:
+        submitted_api_key = saved_api_key
     ai_config = {
-        "enabled": settings_repo.get_verification_ai_enabled(),
-        "base_url": settings_repo.get_verification_ai_base_url(),
-        "api_key": settings_repo.get_verification_ai_api_key(),
-        "model": settings_repo.get_verification_ai_model(),
+        "enabled": _parse_bool_input(data.get("enabled"), default=True),
+        "base_url": str(data.get("base_url") or settings_repo.get_verification_ai_base_url()).strip(),
+        "api_key": submitted_api_key,
+        "model": str(data.get("model") or settings_repo.get_verification_ai_model()).strip(),
     }
 
     sample_email = {
@@ -1470,6 +1477,28 @@ def api_test_verification_ai() -> Any:
             "probe": probe,
         }
     )
+
+
+@login_required
+def api_list_verification_ai_models() -> Any:
+    """从当前 OpenAI 兼容服务读取模型名称列表。"""
+    data = request.get_json(silent=True) or {}
+    saved_api_key = settings_repo.get_verification_ai_api_key()
+    submitted_api_key = str(data.get("api_key") or "").strip()
+    if not submitted_api_key or "*" in submitted_api_key:
+        submitted_api_key = saved_api_key
+
+    result = list_verification_ai_models(
+        str(data.get("base_url") or settings_repo.get_verification_ai_base_url()).strip(),
+        submitted_api_key,
+    )
+    log_audit(
+        "verification_ai_models_list",
+        "settings",
+        None,
+        f"ok={result.get('ok')} count={len(result.get('models') or [])} error={result.get('error') or ''}",
+    )
+    return jsonify({"success": True, **result})
 
 
 @login_required
