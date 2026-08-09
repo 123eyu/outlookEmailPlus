@@ -108,11 +108,7 @@ class CustomTempMailProvider(TempMailProviderBase):
             "provider_mailbox_id": "",
             "provider_cursor": "",
             "provider_labels": [],
-            "provider_capabilities": {
-                "delete_mailbox": self.provider_capabilities["delete_mailbox"],
-                "delete_message": self.provider_capabilities["delete_message"],
-                "clear_messages": self.provider_capabilities["clear_messages"],
-            },
+            "provider_capabilities": dict(self.provider_capabilities),
             "provider_debug": {"bridge": "gptmail"},
         }
 
@@ -136,6 +132,8 @@ class CustomTempMailProvider(TempMailProviderBase):
             "max_length": int(prefix_rules.get("max_length", DEFAULT_PREFIX_RULES["max_length"])),
             "pattern": str(prefix_rules.get("pattern") or DEFAULT_PREFIX_RULES["pattern"]),
         }
+        api_base_url = settings_repo.get_temp_mail_api_base_url().strip()
+        api_key = settings_repo.get_temp_mail_api_key().strip()
 
         return {
             "domain_strategy": "auto_or_manual",
@@ -145,7 +143,8 @@ class CustomTempMailProvider(TempMailProviderBase):
             "provider": self.provider_name,
             "provider_name": self.provider_name,
             "provider_label": "temp_mail",
-            "api_base_url": settings_repo.get_temp_mail_api_base_url(),
+            "api_base_url": api_base_url,
+            "configured": bool(api_base_url and api_key),
         }
 
     def create_mailbox(self, *, prefix: str | None = None, domain: str | None = None) -> dict[str, Any]:
