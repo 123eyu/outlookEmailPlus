@@ -1396,44 +1396,22 @@ def api_test_webhook() -> Any:
             None,
             f"success=false code={exc.code} details={details_text[:200]}",
         )
-        diagnostics = {
-            key: value
-            for key, value in {
-                "status_code": exc.status_code,
-                "duration_ms": exc.duration_ms,
-                "attempts": exc.attempts,
-            }.items()
-            if value is not None
-        }
         return _json_error(
             exc.code,
             exc.message,
             status=exc.status,
             message_en=exc.message_en,
             details=exc.details,
-            extra=diagnostics or None,
         )
 
     safe_url = str(result.get("url") or "")
-    status_code = result.get("status_code")
-    duration_ms = result.get("duration_ms")
-    attempts = result.get("attempts")
-    log_audit(
-        "webhook_notification_test",
-        "settings",
-        None,
-        f"success=true url={safe_url} status={status_code} "
-        f"duration_ms={duration_ms} attempts={attempts}",
-    )
+    log_audit("webhook_notification_test", "settings", None, f"success=true url={safe_url}")
     return jsonify(
         {
             "success": True,
             "message": "Webhook 测试消息已发送",
             "message_en": "Webhook test message sent",
             "url": safe_url,
-            "status_code": status_code,
-            "duration_ms": duration_ms,
-            "attempts": attempts,
         }
     )
 

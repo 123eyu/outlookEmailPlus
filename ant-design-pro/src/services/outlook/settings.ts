@@ -63,19 +63,8 @@ export async function testEmailNotification() {
   );
 }
 
-export type WebhookTestResponse = {
-  success: boolean;
-  message?: string;
-  message_en?: string;
-  url?: string;
-  status_code?: number;
-  duration_ms?: number;
-  attempts?: number;
-  error?: any;
-};
-
 export async function testWebhook(body: Record<string, any> = {}) {
-  return outlookRequest<WebhookTestResponse>(
+  return outlookRequest<{ success: boolean; message?: string; error?: any }>(
     '/api/settings/webhook-test',
     { method: 'POST', data: body, skipErrorHandler: true },
   );
