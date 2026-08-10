@@ -1422,8 +1422,7 @@ def api_test_webhook() -> Any:
         "webhook_notification_test",
         "settings",
         None,
-        f"success=true url={safe_url} status={status_code} "
-        f"duration_ms={duration_ms} attempts={attempts}",
+        f"success=true url={safe_url} status={status_code} " f"duration_ms={duration_ms} attempts={attempts}",
     )
     return jsonify(
         {

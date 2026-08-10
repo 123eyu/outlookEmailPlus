@@ -132,19 +132,16 @@ def send_webhook_message(
             last_status_code = int(response.status_code)
             if 200 <= response.status_code < 300:
                 return {
-                    'status_code': int(response.status_code),
-                    'duration_ms': round((perf_counter() - started_at) * 1000),
-                    'attempts': attempt,
+                    "status_code": int(response.status_code),
+                    "duration_ms": round((perf_counter() - started_at) * 1000),
+                    "attempts": attempt,
                 }
             last_error = WebhookPushError(
                 "WEBHOOK_SEND_FAILED",
                 "Webhook 发送失败",
                 message_en="Failed to send webhook message",
                 status=502,
-                details=(
-                    f"attempt={attempt}/{attempts} "
-                    f"status={response.status_code} body={(response.text or '')[:200]}"
-                ),
+                details=(f"attempt={attempt}/{attempts} " f"status={response.status_code} body={(response.text or '')[:200]}"),
             )
         except requests.RequestException as exc:
             last_status_code = None
@@ -167,11 +164,11 @@ def send_webhook_message(
         last_error.status_code = last_status_code
         last_error.duration_ms = failure_duration_ms
         last_error.attempts = attempts
-        details_text = str(last_error.details or '').strip()
+        details_text = str(last_error.details or "").strip()
         last_error.details = (
-            f'{details_text}; attempts={attempts} duration_ms={failure_duration_ms}'
+            f"{details_text}; attempts={attempts} duration_ms={failure_duration_ms}"
             if details_text
-            else f'attempts={attempts} duration_ms={failure_duration_ms}'
+            else f"attempts={attempts} duration_ms={failure_duration_ms}"
         )
         raise last_error
     raise WebhookPushError(
