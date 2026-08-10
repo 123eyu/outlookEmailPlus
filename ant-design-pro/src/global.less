@@ -50,95 +50,6 @@ body,
     sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-/*
- * Shared tokens from the original frontend. Ant Design's semantic colors are
- * configured in config/theme.ts; these CSS aliases cover inline styles and
- * non-token layout surfaces as well.
- */
-:root {
-  --outlook-primary: #B85C38;
-  --outlook-primary-dark: #8E3E22;
-  --outlook-primary-light: #D4795A;
-  --outlook-accent: #C8963E;
-  --outlook-jade: #3A7D44;
-  --outlook-success: #27AE60;
-  --outlook-danger: #C0392B;
-  --outlook-warn: #E67E22;
-  --outlook-bg: #F5EDE0;
-  --outlook-bg-card: #FDFAF5;
-  --outlook-bg-secondary: #F0E8D8;
-  --outlook-text: #2C1810;
-  --outlook-text-secondary: #6B4226;
-  --outlook-text-muted: #9E7A5A;
-  --outlook-border: #D9C4A8;
-  --outlook-border-light: #EDE0CE;
-  --outlook-bg-hover: rgba(184, 92, 56, 0.06);
-  --outlook-primary-bg: #F7EDE8;
-  --outlook-sidebar: #2C1A0E;
-  --outlook-sidebar-text: #EDD9BE;
-  --outlook-sidebar-text-muted: rgba(237, 217, 190, 0.62);
-  --outlook-sidebar-hover: rgba(255, 255, 255, 0.07);
-  --outlook-sidebar-selected: rgba(184, 92, 56, 0.22);
-}
-
-body {
-  background: var(--outlook-bg);
-  color: var(--outlook-text);
-}
-
-.ant-layout,
-.ant-pro-layout,
-.ant-pro-layout-content {
-  background: var(--outlook-bg);
-}
-
-.ant-pro-layout-header,
-.ant-pro-layout-top-nav-header {
-  background: var(--outlook-bg-card) !important;
-  border-bottom: 1px solid var(--outlook-border-light);
-}
-
-/* Keep ProLayout navigation aligned with the original ink-brown sidebar. */
-.ant-pro-sider,
-.ant-pro-sider .ant-layout-sider-children,
-.ant-pro-sider .ant-menu,
-.ant-pro-sider .ant-menu-dark,
-.ant-pro-sider .ant-menu-sub,
-.ant-pro-sider .ant-pro-sider-menu {
-  background: var(--outlook-sidebar) !important;
-}
-
-.ant-pro-sider .ant-pro-sider-logo {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.ant-pro-sider .ant-menu-item,
-.ant-pro-sider .ant-menu-submenu-title {
-  color: var(--outlook-sidebar-text-muted);
-}
-
-.ant-pro-sider .ant-menu-item:hover,
-.ant-pro-sider .ant-menu-submenu-title:hover {
-  color: var(--outlook-sidebar-text) !important;
-  background: var(--outlook-sidebar-hover) !important;
-}
-
-.ant-pro-sider .ant-menu-item-selected,
-.ant-pro-sider .ant-menu-submenu-selected > .ant-menu-submenu-title {
-  color: var(--outlook-primary-light) !important;
-  background: var(--outlook-sidebar-selected) !important;
-}
-
-.ant-pro-sider .ant-menu-item-selected::after {
-  border-inline-end-color: var(--outlook-primary) !important;
-  box-shadow: inset 3px 0 0 var(--outlook-primary);
-}
-
-.ant-card,
-.ant-pro-card {
-  background: var(--outlook-bg-card);
-}
-
 .colorWeak {
   filter: invert(80%);
 }
@@ -188,7 +99,7 @@ ol {
 
 /* 简洁模式选中行高亮（对齐旧前端 mail-row.is-selected） */
 .mailbox-compact-row-selected > td {
-  background: var(--outlook-primary-bg) !important;
+  background: rgba(184, 92, 56, 0.08) !important;
 }
 
 @media (max-width: 768px) {

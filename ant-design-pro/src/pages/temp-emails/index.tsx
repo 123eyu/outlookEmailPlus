@@ -20,7 +20,6 @@ import {
   Spin,
   Tag,
   Typography,
-  theme,
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -66,7 +65,6 @@ const TempEmailsPage: React.FC = () => {
   const intl = useIntl();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
-  const { token } = theme.useToken();
 
   const [providerName, setProviderName] = useState<string | undefined>();
   const [selectedEmail, setSelectedEmail] = useState<string | undefined>();
@@ -446,9 +444,9 @@ const TempEmailsPage: React.FC = () => {
                       style={{
                         padding: '10px 14px',
                         cursor: 'pointer',
-                        background: active ? token.colorPrimaryBg : undefined,
+                        background: active ? 'rgba(184, 92, 56, 0.08)' : undefined,
                         borderLeft: active
-                          ? `3px solid ${token.colorPrimary}`
+                          ? '3px solid #B85C38'
                           : '3px solid transparent',
                       }}
                       onClick={() => setSelectedEmail(item.email)}
@@ -559,7 +557,7 @@ const TempEmailsPage: React.FC = () => {
                           padding: '12px 14px',
                           cursor: 'pointer',
                           background: active
-                            ? token.colorPrimaryBg
+                            ? 'rgba(184, 92, 56, 0.08)'
                             : undefined,
                         }}
                         onClick={() => void openDetail(item)}
@@ -619,7 +617,7 @@ const TempEmailsPage: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    borderTop: `1px solid ${token.colorBorderSecondary}`,
+                    borderTop: '1px solid rgba(0,0,0,0.06)',
                     paddingTop: 12,
                   }}
                 >
@@ -631,7 +629,7 @@ const TempEmailsPage: React.FC = () => {
                       width: '100%',
                       minHeight: 320,
                       border: 'none',
-                      background: token.colorBgContainer,
+                      background: '#fff',
                     }}
                   />
                 </div>
