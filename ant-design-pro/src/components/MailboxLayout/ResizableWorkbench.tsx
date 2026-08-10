@@ -2,7 +2,7 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { Button, Tooltip } from 'antd';
+import { Button, Tooltip, theme } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   buildGridTemplate,
@@ -39,6 +39,7 @@ const ResizableWorkbench: React.FC<Props> = ({
   emails,
   resetToken = 0,
 }) => {
+  const { token } = theme.useToken();
   const [layout, setLayout] = useState<MailboxLayoutState>(() =>
     loadLayoutState(userId),
   );
@@ -179,7 +180,7 @@ const ResizableWorkbench: React.FC<Props> = ({
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          background: 'var(--ant-color-bg-container, #fff)',
+          background: token.colorBgContainer,
           position: 'relative',
         }}
       >
@@ -191,7 +192,7 @@ const ResizableWorkbench: React.FC<Props> = ({
             padding: collapsed ? '8px 0' : '6px 8px',
             borderBottom: collapsed
               ? 'none'
-              : '1px solid rgba(5, 5, 5, 0.04)',
+              : '1px solid ' + token.colorBorderSecondary,
             flexDirection: collapsed ? 'column' : 'row',
             gap: 4,
             minHeight: 36,
@@ -272,7 +273,7 @@ const ResizableWorkbench: React.FC<Props> = ({
         cursor: layout.panels[forPanel].collapsed ? 'default' : 'col-resize',
         background: 'transparent',
         border: 0,
-        borderLeft: '1px solid rgba(5,5,5,0.06)',
+        borderLeft: '1px solid ' + token.colorBorderSecondary,
         alignSelf: 'stretch',
       }}
     />
@@ -288,7 +289,7 @@ const ResizableWorkbench: React.FC<Props> = ({
         minHeight: 560,
         height: 'calc(100vh - 220px)',
         minWidth: COLLAPSED_W * 3 + 12,
-        border: '1px solid rgba(5, 5, 5, 0.06)',
+        border: '1px solid ' + token.colorBorderSecondary,
         borderRadius: 8,
         overflow: 'hidden',
       }}

@@ -996,7 +996,7 @@ const MailboxPage: React.FC = () => {
         <div
           style={{
             padding: '8px 10px',
-            borderBottom: '1px solid rgba(5,5,5,0.04)',
+            borderBottom: '1px solid ' + token.colorBorderSecondary,
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
@@ -1207,7 +1207,7 @@ const MailboxPage: React.FC = () => {
               </div>
               <div
                 style={{
-                  borderTop: '1px solid rgba(0,0,0,0.06)',
+                  borderTop: '1px solid ' + token.colorBorderSecondary,
                   paddingTop: 12,
                 }}
               >
@@ -1223,7 +1223,7 @@ const MailboxPage: React.FC = () => {
                     width: '100%',
                     minHeight: 360,
                     border: 'none',
-                    background: '#fff',
+                    background: token.colorBgContainer,
                   }}
                 />
               </div>
@@ -1362,7 +1362,7 @@ const MailboxPage: React.FC = () => {
               {account.group_name || '--'}
             </Tag>
             {userTags.map((name) => (
-              <Tag key={name} color="blue" style={{ marginInlineEnd: 0 }}>
+              <Tag key={name} color="processing" style={{ marginInlineEnd: 0 }}>
                 {name}
               </Tag>
             ))}
