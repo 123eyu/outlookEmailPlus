@@ -4,12 +4,6 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
-### 优化 / Improvements
-
-- **ZER-582 新前端视觉细节打磨（#140 后续）**：语义色收敛进暖色品牌色族（success 统一为 jade、danger/warn 暖化、info 语义回归品牌主色），消除提示条与状态标签上的冷色杂色；`textMuted` 加深至 `#7D5F44`，奶白背景对比度由 3.4:1 提升至 5.1:1（WCAG AA）；侧边栏选中项改为单一左侧品牌指示条（移除右缘默认边框与内阴影的叠加）并柔化选中底色；AI 测试结果的「连通性 / 契约校验」由纯文本改为状态标签对，失败定位更直观。
-- **ZER-582 新前端服务展示风格统一**：服务设置、临时邮箱、API Key、Token 工具等页面的主题色统一为品牌色板（`config/theme.ts` + `global.less` CSS 变量），消除与纯白前端不搭的大红大紫默认色；API Key 列表改为简洁表格（名称 / 状态 / 脱敏 Token / 操作），权限与邮箱范围固定于创建时选择，详情通过下拉菜单查看；Webhook 测试展示真实投递结果（URL、上游 HTTP 状态、耗时、尝试次数），Token 留空表示清空；AI 连通性测试区分连通性与契约两段状态并展示失败详情。
-- **版本号更新为 2.9.8**。
-
 ### 集成 / Integration
 
 - **#109 新前端主线回收**：将 polish 分支与功能 PR（#130/#131/#132/#133/#134/#137）统一回收到 `feat/ant-design-pro-frontend-migration`（PR #109）。Railway 测试环境源分支改绑本分支。

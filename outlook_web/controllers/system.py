@@ -141,7 +141,10 @@ def healthz() -> Any:
         or ""
     )
     build_time = (
-        _clean(os.getenv("BUILD_TIME")) or _clean(_read_build_file("/app/.build_time")) or _clean(info_map.get("time")) or ""
+        _clean(os.getenv("BUILD_TIME"))
+        or _clean(_read_build_file("/app/.build_time"))
+        or _clean(info_map.get("time"))
+        or ""
     )
     return (
         jsonify(

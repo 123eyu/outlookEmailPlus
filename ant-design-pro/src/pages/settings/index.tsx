@@ -1,7 +1,7 @@
 import {
   CopyOutlined,
+  DeleteOutlined,
   KeyOutlined,
-  MoreOutlined,
   ReloadOutlined,
   SaveOutlined,
   SyncOutlined,
@@ -18,7 +18,6 @@ import {
   Collapse,
   Descriptions,
   Divider,
-  Dropdown,
   Form,
   Input,
   InputNumber,
@@ -26,7 +25,6 @@ import {
   Select,
   Space,
   Switch,
-  Table,
   Tabs,
   Tag,
   Typography,
@@ -45,7 +43,6 @@ import {
   fetchSettings,
   fetchVerificationAiModels,
   type VerificationAiTestResponse,
-  type WebhookTestResponse,
   normalizePollingSettings,
   POLLING_COUNT_MAX,
   POLLING_COUNT_MIN,
@@ -80,42 +77,8 @@ const describeAiError = (error?: string) =>
     request_failed: '网络、DNS 或超时失败，请确认服务地址可从服务器访问。',
     http_error: '服务返回错误，请检查 API Key、模型名称、额度和 URL。',
     invalid_response_format: '服务可访问，但响应格式不是兼容的 OpenAI 格式。',
-    invalid_ai_output: '服务可访问，但验证码解析结果不符合固定契约。',
+    invalid_ai_output: '服务可访问，但模型输出不符合验证码提取契约。',
   })[error || ''] || '连接失败，请根据下方状态与端点信息排查。';
-
-const isAiProbeSuccessful = (result?: VerificationAiTestResponse | null) =>
-  Boolean(result?.ok && result?.contract_ok !== false);
-
-const buildAiTestFailureResult = (error: any): VerificationAiTestResponse => {
-  const payload =
-    error?.data ||
-    error?.info ||
-    error?.response?.data ||
-    {};
-  const serverError = payload?.error;
-  const message =
-    (typeof serverError === 'object' && serverError?.message) ||
-    (typeof serverError === 'string' && serverError) ||
-    payload?.message ||
-    error?.message ||
-    'AI 连通性测试失败';
-  const model = String(payload?.model || '').trim();
-  const endpoint = String(payload?.endpoint || '').trim();
-
-  return {
-    success: false,
-    ok: false,
-    connectivity_ok: false,
-    contract_ok: false,
-    probe: {
-      error: 'request_failed',
-      message,
-      model,
-      endpoint,
-      http_status: Number(payload?.status || error?.status || 0) || undefined,
-    },
-  };
-};
 
 const SettingsPage: React.FC = () => {
   const { message, modal } = App.useApp();
@@ -131,7 +94,6 @@ const SettingsPage: React.FC = () => {
     useState<CreateExternalApiKeyResponse | null>(null);
   const [dirty, setDirty] = useState(false);
   const [keyRows, setKeyRows] = useState<KeyRow[]>([]);
-  const [keyDetail, setKeyDetail] = useState<KeyRow | null>(null);
   const [originalKeysCanonical, setOriginalKeysCanonical] = useState('[]');
   const [deployment, setDeployment] = useState<Record<string, any> | null>(
     null,
@@ -144,9 +106,6 @@ const SettingsPage: React.FC = () => {
   const [aiTestLoading, setAiTestLoading] = useState(false);
   const [aiTestResult, setAiTestResult] =
     useState<VerificationAiTestResponse | null>(null);
-  const [webhookTestLoading, setWebhookTestLoading] = useState(false);
-  const [webhookTestResult, setWebhookTestResult] =
-    useState<WebhookTestResponse | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -325,7 +284,7 @@ const SettingsPage: React.FC = () => {
         use_cron_schedule: values.use_cron_schedule ? 'true' : 'false',
       };
 
-      // 敏感字段：仍等于脱敏占位时不提交；Webhook Token 留空表示清空
+      // 敏感字段：空串 / 仍等于脱敏占位 → 不提交，避免误清空
       const secretKeys = [
         'telegram_bot_token',
         'webhook_notification_token',
@@ -339,9 +298,7 @@ const SettingsPage: React.FC = () => {
       for (const key of secretKeys) {
         const raw = String(values[key] ?? '').trim();
         const mask = String(secretMasks[key] || '');
-        if (key === 'webhook_notification_token' && !raw) {
-          payload[key] = '';
-        } else if (!raw || (mask && raw === mask)) {
+        if (!raw || (mask && raw === mask)) {
           delete payload[key];
         }
       }
@@ -429,21 +386,13 @@ const SettingsPage: React.FC = () => {
     try {
       const res = await testVerificationAi(payload);
       setAiTestResult(res);
-      if (isAiProbeSuccessful(res)) {
+      if (res?.ok) {
         message.success('AI 连通性正常');
-      } else if (res?.connectivity_ok) {
-        message.warning(
-          res?.probe?.message || describeAiError(res?.probe?.error),
-        );
       } else {
         message.error(res?.probe?.message || describeAiError(res?.probe?.error));
       }
     } catch (error: any) {
-      const failure = buildAiTestFailureResult(error);
-      setAiTestResult(failure);
-      message.error(
-        failure.probe?.message || describeAiError(failure.probe?.error),
-      );
+      message.error(error?.message || 'AI 连通性测试失败');
     } finally {
       setAiTestLoading(false);
     }
@@ -468,55 +417,6 @@ const SettingsPage: React.FC = () => {
           error?.message || failText,
         ),
       );
-    }
-  };
-
-  const testSavedWebhook = async () => {
-    if (dirty) {
-      message.warning('请先保存当前 Webhook 配置，再测试已保存配置');
-      return;
-    }
-    if (!form.getFieldValue('webhook_notification_enabled')) {
-      message.warning('请先启用 Webhook 并保存配置，再进行测试');
-      return;
-    }
-    setWebhookTestLoading(true);
-    setWebhookTestResult(null);
-    try {
-      const result = await testWebhook({});
-      setWebhookTestResult(result);
-      if (result?.success === false) {
-        message.error(pickSettingsError(result, 'Webhook 测试失败'));
-      } else {
-        message.success(result?.message || 'Webhook 测试成功');
-      }
-    } catch (error: any) {
-      const payload =
-        error?.data ||
-        error?.info ||
-        error?.response?.data || {
-          error: error?.message || 'Webhook 测试失败',
-        };
-      const diagnostics = {
-        status_code: payload?.status_code,
-        duration_ms: payload?.duration_ms,
-        attempts: payload?.attempts,
-      };
-      const normalized: WebhookTestResponse = {
-        success: false,
-        ...diagnostics,
-        error:
-          payload?.error && typeof payload.error === 'object'
-            ? { ...payload.error, ...diagnostics }
-            : {
-                message: payload?.error || payload?.message || 'Webhook 测试失败',
-                ...diagnostics,
-              },
-      };
-      setWebhookTestResult(normalized);
-      message.error(pickSettingsError(normalized, 'Webhook 测试失败'));
-    } finally {
-      setWebhookTestLoading(false);
     }
   };
 
@@ -582,38 +482,6 @@ const SettingsPage: React.FC = () => {
       rows.map((r) => (r._localId === localId ? { ...r, ...patch } : r)),
     );
     setDirty(true);
-  };
-
-  const toggleKeyStatus = (row: KeyRow) => {
-    const status = getApiKeyStatus(row);
-    if (status === 'expired') {
-      message.warning('已过期的 Key 不能直接启用，请重新创建');
-      return;
-    }
-    const enabled = row.enabled === false;
-    updateKeyRow(row._localId, { enabled });
-    setKeyDetail((current) =>
-      current?._localId === row._localId ? { ...current, enabled } : current,
-    );
-  };
-
-  const deleteKeyRow = (row: KeyRow) => {
-    modal.confirm({
-      title: '删除「' + (row.name || '未命名 Key') + '」？',
-      content: '删除后该 Key 将无法继续调用，保存设置后立即生效。',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: () => {
-        setKeyRows((rows) =>
-          rows.filter((item) => item._localId !== row._localId),
-        );
-        setKeyDetail((current) =>
-          current?._localId === row._localId ? null : current,
-        );
-        setDirty(true);
-      },
-    });
   };
 
   const openCreateKey = () => {
@@ -703,7 +571,6 @@ const SettingsPage: React.FC = () => {
   };
 
   const sMeta = settingsQuery.data?.settings || {};
-  const aiTestSuccessful = isAiProbeSuccessful(aiTestResult);
 
   return (
     <PageContainer
@@ -928,7 +795,7 @@ const SettingsPage: React.FC = () => {
                   <Form.Item
                     name="webhook_notification_token"
                     label="Webhook Token"
-                    extra="显示脱敏值；改写后保存才会更新，留空会清空 Token"
+                    extra="显示脱敏值；改写后保存才会更新，留空不改"
                   >
                     <Input.Password
                       visibilityToggle
@@ -937,87 +804,12 @@ const SettingsPage: React.FC = () => {
                   </Form.Item>
                   <Button
                     style={{ marginBottom: 16 }}
-                    loading={webhookTestLoading}
-                    onClick={() => void testSavedWebhook()}
+                    onClick={() =>
+                      void runTest(() => testWebhook({}), 'Webhook 测试成功')
+                    }
                   >
-                    测试已保存配置
+                    测试 Webhook
                   </Button>
-                  <Typography.Paragraph
-                    type="secondary"
-                    style={{ margin: '-8px 0 16px' }}
-                  >
-                    测试只会调用服务器已保存的 URL 和 Token；如修改过上方字段，请先点击页面顶部或底部的「保存」。
-                  </Typography.Paragraph>
-                  {webhookTestResult && (
-                    <Alert
-                      showIcon
-                      style={{ marginBottom: 16 }}
-                      type={webhookTestResult.success ? 'success' : 'error'}
-                      message={
-                        webhookTestResult.success
-                          ? 'Webhook 测试已发送'
-                          : pickSettingsError(
-                              { error: webhookTestResult.error },
-                              'Webhook 测试失败',
-                            )
-                      }
-                      description={
-                        webhookTestResult.success ? (
-                          <Space direction="vertical" size={2}>
-                            <Typography.Text>
-                              目标：{webhookTestResult.url || '服务端未返回'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              上游 HTTP：
-                              {webhookTestResult.status_code ?? '未返回'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              耗时：
-                              {webhookTestResult.duration_ms != null
-                                ? webhookTestResult.duration_ms + ' ms'
-                                : '服务端未返回投递耗时'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              尝试次数：
-                              {webhookTestResult.attempts ?? '服务端未返回'}
-                            </Typography.Text>
-                          </Space>
-                        ) : (
-                          <Space direction="vertical" size={2}>
-                            <Typography.Text>
-                              上游 HTTP：
-                              {webhookTestResult.status_code ??
-                                webhookTestResult.error?.status_code ??
-                                '未返回'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              耗时：
-                              {(webhookTestResult.duration_ms ??
-                                webhookTestResult.error?.duration_ms) != null
-                                ? `${webhookTestResult.duration_ms ?? webhookTestResult.error.duration_ms} ms`
-                                : '未返回'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              尝试次数：
-                              {webhookTestResult.attempts ??
-                                webhookTestResult.error?.attempts ??
-                                '未返回'}
-                            </Typography.Text>
-                            <Typography.Text>
-                              错误码：
-                              {webhookTestResult.error?.code || '未返回'}
-                            </Typography.Text>
-                            {webhookTestResult.error?.details && (
-                              <Typography.Text type="secondary">
-                                服务端细节：
-                                {String(webhookTestResult.error.details)}
-                              </Typography.Text>
-                            )}
-                          </Space>
-                        )
-                      }
-                    />
-                  )}
 
                   <Typography.Title level={5}>Telegram</Typography.Title>
                   <Form.Item
@@ -1120,42 +912,20 @@ const SettingsPage: React.FC = () => {
                     <Alert
                       showIcon
                       style={{ marginTop: 16 }}
-                      type={aiTestSuccessful ? 'success' : 'error'}
+                      type={aiTestResult.ok ? 'success' : 'error'}
                       message={
-                        aiTestSuccessful
+                        aiTestResult.ok
                           ? '连接成功'
                           : aiTestResult.probe?.message ||
                             describeAiError(aiTestResult.probe?.error)
                       }
                       description={
                         <Space direction="vertical" size={2}>
-                          {!aiTestSuccessful && (
+                          {!aiTestResult.ok && (
                             <Typography.Text>
                               {describeAiError(aiTestResult.probe?.error)}
                             </Typography.Text>
                           )}
-                          <Space size={8}>
-                            <Tag
-                              color={
-                                aiTestResult.connectivity_ok
-                                  ? 'success'
-                                  : 'error'
-                              }
-                              style={{ marginInlineEnd: 0 }}
-                            >
-                              连通性：
-                              {aiTestResult.connectivity_ok ? '正常' : '失败'}
-                            </Tag>
-                            <Tag
-                              color={
-                                aiTestResult.contract_ok ? 'success' : 'error'
-                              }
-                              style={{ marginInlineEnd: 0 }}
-                            >
-                              契约校验：
-                              {aiTestResult.contract_ok ? '通过' : '失败'}
-                            </Tag>
-                          </Space>
                           <Typography.Text>
                             模型：{aiTestResult.probe?.model || '未返回'}
                           </Typography.Text>
@@ -1218,7 +988,7 @@ const SettingsPage: React.FC = () => {
                         type="secondary"
                         style={{ margin: '4px 0 0' }}
                       >
-                        列表保持简洁；权限与邮箱范围只在创建时选择，后续变更请重新创建 Key。
+                        创建独立 Key，并按需要设置访问范围和有效期。
                       </Typography.Paragraph>
                     </div>
                     <Button
@@ -1231,114 +1001,155 @@ const SettingsPage: React.FC = () => {
                   </div>
 
                   {keyRows.length ? (
-                    <Table<KeyRow>
-                      rowKey="_localId"
-                      size="small"
-                      dataSource={keyRows}
-                      pagination={false}
-                      style={{ marginBottom: 20 }}
-                      columns={[
-                        {
-                          title: '名称',
-                          key: 'name',
-                          render: (_: unknown, row: KeyRow) => (
-                            <Space size={8}>
-                              <KeyOutlined />
-                              <Typography.Text strong>
-                                {row.name || '未命名 Key'}
-                              </Typography.Text>
-                            </Space>
-                          ),
-                        },
-                        {
-                          title: '状态',
-                          key: 'status',
-                          render: (_: unknown, row: KeyRow) => {
-                            const status = getApiKeyStatus(row);
-                            const statusLabel =
-                              status === 'active'
-                                ? '启用'
-                                : status === 'expired'
-                                  ? '已过期'
-                                  : '停用';
-                            const statusColor =
-                              status === 'active'
-                                ? 'success'
-                                : status === 'expired'
-                                  ? 'error'
-                                  : 'default';
-                            return <Tag color={statusColor}>{statusLabel}</Tag>;
-                          },
-                        },
-                        {
-                          title: 'Token',
-                          key: 'token',
-                          render: (_: unknown, row: KeyRow) => (
-                            <Typography.Text code>
-                              {row.api_key_masked || row.api_key || '••••••••'}
-                            </Typography.Text>
-                          ),
-                        },
-                        {
-                          title: '操作',
-                          key: 'actions',
-                          align: 'right' as const,
-                          render: (_: unknown, row: KeyRow) => {
-                            const status = getApiKeyStatus(row);
-                            return (
-                              <Dropdown
-                                trigger={['click']}
-                                menu={{
-                                  items: [
-                                    { key: 'detail', label: '查看详情' },
-                                    status === 'expired'
-                                      ? {
-                                          key: 'toggle',
-                                          label: '已过期，需重新创建',
-                                          disabled: true,
-                                        }
-                                      : {
-                                          key: 'toggle',
-                                          label:
-                                            status === 'active'
-                                              ? '停用 Key'
-                                              : '启用 Key',
-                                        },
-                                    { type: 'divider' },
-                                    {
-                                      key: 'delete',
-                                      label: '删除 Key',
-                                      danger: true,
-                                    },
-                                  ],
-                                  onClick: ({ key }) => {
-                                    if (key === 'detail') {
-                                      setKeyDetail(row);
-                                    } else if (key === 'toggle') {
-                                      toggleKeyStatus(row);
-                                    } else if (key === 'delete') {
-                                      deleteKeyRow(row);
-                                    }
-                                  },
-                                }}
-                              >
+                    <Space
+                      direction="vertical"
+                      size={12}
+                      style={{ display: 'flex', width: '100%', marginBottom: 20 }}
+                    >
+                      {keyRows.map((row) => {
+                        const status = getApiKeyStatus(row);
+                        const statusLabel =
+                          status === 'active'
+                            ? '启用'
+                            : status === 'expired'
+                              ? '已过期'
+                              : '停用';
+                        const statusColor =
+                          status === 'active'
+                            ? 'success'
+                            : status === 'expired'
+                              ? 'error'
+                              : 'default';
+                        const emailScope = Array.isArray(row.allowed_emails)
+                          ? row.allowed_emails
+                          : parseEmailScope(row.allowed_emails);
+
+                        return (
+                          <ProCard
+                            key={row._localId}
+                            variant="outlined"
+                            title={
+                              <Space>
+                                <KeyOutlined />
+                                <Typography.Text strong>
+                                  {row.name || '未命名 Key'}
+                                </Typography.Text>
+                              </Space>
+                            }
+                            extra={
+                              <Space>
+                                <Tag color={statusColor}>{statusLabel}</Tag>
                                 <Button
                                   type="text"
-                                  icon={<MoreOutlined />}
-                                  aria-label={'操作 ' + (row.name || '未命名 Key')}
+                                  danger
+                                  icon={<DeleteOutlined />}
+                                  title="删除 Key"
+                                  aria-label={`删除 ${row.name || '未命名 Key'}`}
+                                  onClick={() => {
+                                    setKeyRows((rows) =>
+                                      rows.filter(
+                                        (item) => item._localId !== row._localId,
+                                      ),
+                                    );
+                                    setDirty(true);
+                                  }}
                                 />
-                              </Dropdown>
-                            );
-                          },
-                        },
-                      ]}
-                    />
+                              </Space>
+                            }
+                          >
+                            <Descriptions
+                              size="small"
+                              column={{ xs: 1, sm: 2, lg: 3 }}
+                            >
+                              <Descriptions.Item label="Key">
+                                <Typography.Text code>
+                                  {row.api_key_masked || row.api_key || '—'}
+                                </Typography.Text>
+                              </Descriptions.Item>
+                              <Descriptions.Item label="过期时间">
+                                {getApiKeyExpiryLabel(row)}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="最后使用">
+                                {row.last_used_at
+                                  ? String(row.last_used_at).slice(0, 10)
+                                  : '尚未使用'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="权限">
+                                {row.pool_access ? 'API + 邮箱池' : '仅 API'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="邮箱范围">
+                                {emailScope.length
+                                  ? `${emailScope.length} 个邮箱`
+                                  : '全部邮箱'}
+                              </Descriptions.Item>
+                              <Descriptions.Item label="创建时间">
+                                {row.created_at
+                                  ? String(row.created_at).slice(0, 10)
+                                  : '—'}
+                              </Descriptions.Item>
+                            </Descriptions>
+
+                            <Divider style={{ margin: '12px 0' }} />
+                            <Space wrap align="start" size={12}>
+                              <Input
+                                aria-label="Key 名称"
+                                value={row.name}
+                                style={{ width: 220 }}
+                                placeholder="Key 名称"
+                                onChange={(event) =>
+                                  updateKeyRow(row._localId, {
+                                    name: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input.TextArea
+                                aria-label="邮箱范围"
+                                autoSize={{ minRows: 1, maxRows: 3 }}
+                                value={emailScope.join('\n')}
+                                style={{ width: 300 }}
+                                placeholder="每行一个邮箱，留空表示全部邮箱"
+                                onChange={(event) =>
+                                  updateKeyRow(row._localId, {
+                                    allowed_emails: event.target.value
+                                      .split(/[\n,]/)
+                                      .map((email) => email.trim())
+                                      .filter(Boolean),
+                                  })
+                                }
+                              />
+                              <Space>
+                                <Typography.Text>邮箱池</Typography.Text>
+                                <Switch
+                                  checked={!!row.pool_access}
+                                  onChange={(checked) =>
+                                    updateKeyRow(row._localId, {
+                                      pool_access: checked,
+                                    })
+                                  }
+                                />
+                              </Space>
+                              <Space>
+                                <Typography.Text>启用</Typography.Text>
+                                <Switch
+                                  checked={row.enabled !== false}
+                                  onChange={(checked) =>
+                                    updateKeyRow(row._localId, {
+                                      enabled: checked,
+                                    })
+                                  }
+                                />
+                              </Space>
+                            </Space>
+                          </ProCard>
+                        );
+                      })}
+                    </Space>
                   ) : (
                     <Alert
                       type="info"
                       showIcon
                       message="尚未创建 API Key"
-                      description="列表只展示名称、状态和脱敏 Token；权限与邮箱范围在创建时选择，后续变更请重新创建 Key。"
+                      description="创建后，Key 的状态、权限和过期时间会显示在这里。"
                       style={{ marginBottom: 20 }}
                     />
                   )}
@@ -1654,76 +1465,6 @@ const SettingsPage: React.FC = () => {
           </Space>
         </div>
       </Form>
-
-      <Modal
-        title="API Key 详情"
-        open={!!keyDetail}
-        destroyOnHidden
-        footer={<Button onClick={() => setKeyDetail(null)}>关闭</Button>}
-        onCancel={() => setKeyDetail(null)}
-      >
-        {keyDetail && (
-          <>
-            <Descriptions size="small" column={1}>
-              <Descriptions.Item label="名称">
-                {keyDetail.name || '未命名 Key'}
-              </Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag
-                  color={
-                    getApiKeyStatus(keyDetail) === 'active'
-                      ? 'success'
-                      : getApiKeyStatus(keyDetail) === 'expired'
-                        ? 'error'
-                        : 'default'
-                  }
-                >
-                  {getApiKeyStatus(keyDetail) === 'active'
-                    ? '启用'
-                    : getApiKeyStatus(keyDetail) === 'expired'
-                      ? '已过期'
-                      : '停用'}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Token">
-                <Typography.Text code>
-                  {keyDetail.api_key_masked ||
-                    keyDetail.api_key ||
-                    '••••••••'}
-                </Typography.Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="过期时间">
-                {getApiKeyExpiryLabel(keyDetail)}
-              </Descriptions.Item>
-              <Descriptions.Item label="最后使用">
-                {keyDetail.last_used_at
-                  ? String(keyDetail.last_used_at).slice(0, 10)
-                  : '尚未使用'}
-              </Descriptions.Item>
-              <Descriptions.Item label="权限">
-                {keyDetail.pool_access ? 'API + 邮箱池' : '仅 API'}
-              </Descriptions.Item>
-              <Descriptions.Item label="邮箱范围">
-                {parseEmailScope(keyDetail.allowed_emails).length
-                  ? parseEmailScope(keyDetail.allowed_emails).join(', ')
-                  : '全部邮箱'}
-              </Descriptions.Item>
-              <Descriptions.Item label="创建时间">
-                {keyDetail.created_at
-                  ? String(keyDetail.created_at).slice(0, 10)
-                  : '—'}
-              </Descriptions.Item>
-            </Descriptions>
-            <Alert
-              type="info"
-              showIcon
-              message="权限在创建时固定"
-              description="如需变更权限或邮箱范围，请重新创建一个 API Key；列表仅保留最必要的信息。"
-              style={{ marginTop: 16 }}
-            />
-          </>
-        )}
-      </Modal>
 
       <Modal
         title="创建 API Key"

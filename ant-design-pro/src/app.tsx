@@ -151,8 +151,7 @@ export const layout: RunTimeLayoutConfig = ({
           {children}
           <SettingDrawer
             disableUrlParams
-            // The product uses one fixed brand palette; hide Pro's default theme swatches.
-            colorList={false}
+            enableDarkTheme
             collapse={initialState?.settingDrawerOpen}
             onCollapseChange={(open) => {
               setInitialState((s) => ({
