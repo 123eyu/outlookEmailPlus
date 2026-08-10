@@ -59,9 +59,13 @@ jobs:
             "http://127.0.0.1:4173/overview?tab=performance"
           test -s performance-dashboard.png
           test -s performance-dashboard-mobile.png
+      - name: Capture service settings
+        run: node scripts/settings-visual-smoke.mjs
       - name: Upload visual smoke artifact
         uses: actions/upload-artifact@v4
         with:
-          name: performance-dashboard
-          path: ant-design-pro/performance-dashboard*.png
+          name: zer-582-visual-smoke
+          path: |
+            ant-design-pro/performance-dashboard*.png
+            ant-design-pro/settings-*.png
           if-no-files-found: error
