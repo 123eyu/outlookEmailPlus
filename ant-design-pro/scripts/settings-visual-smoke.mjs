@@ -95,7 +95,7 @@ async function navigate(width, height, mobile) {
     'settings tabs',
   );
   await waitFor(
-    "document.body.innerText.includes('Automation')",
+    "Array.from(document.querySelectorAll('input')).some((input) => input.value === '30')",
     'settings fixture data',
   );
   await evaluate('window.scrollTo(0, 0); true');
