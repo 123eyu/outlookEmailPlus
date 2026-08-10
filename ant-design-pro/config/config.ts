@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
 import defaultSettings from './defaultSettings';
 import proxy from './proxy';
+import { OUTLOOK_ANTD_TOKENS } from './theme';
 
 import routes from './routes';
 
 const { UMI_ENV = 'dev' } = process.env;
+const USE_UTOOPACK = process.env.USE_UTOOPACK === 'true';
 
 // Compute commit hash: env vars take precedence, fall back to git at build time
 const commitHash =
@@ -149,6 +151,7 @@ export default defineConfig({
     configProvider: {
       theme: {
         token: {
+          ...OUTLOOK_ANTD_TOKENS,
           // 与 global.less body 字体栈保持一致，避免个别组件回退到不同的
           // sans-serif 默认字体造成同页字体不一致（如账号管理删除项）
           fontFamily:
@@ -215,18 +218,24 @@ export default defineConfig({
     include: ['src/pages/**/_mock.ts'],
     exclude: ['mock/requestRecord.mock.js'],
   },
-  utoopack: {
-    module: {
-      rules: {
-        '*.md': {
-          loaders: [{ loader: join(__dirname, 'md-raw-loader.cjs') }],
-          as: '*.js',
+  // Utoopack is native/Rust-based and can SIGBUS on some deployment runners;
+  // keep it opt-in while preserving the existing Markdown loader config.
+  utoopack: USE_UTOOPACK
+    ? {
+        module: {
+          rules: {
+            '*.md': {
+              loaders: [{ loader: join(__dirname, 'md-raw-loader.cjs') }],
+              as: '*.js',
+            },
+          },
         },
-      },
-    },
-  },
+      }
+    : false,
   requestRecord: {},
   exportStatic: {},
+  // Avoid duplicate esbuild helpers across async route chunks.
+  esbuildMinifyIIFE: true,
   define: {
     'process.env.CI': process.env.CI,
     'process.env.COMMIT_HASH': commitHash,

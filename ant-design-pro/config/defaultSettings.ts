@@ -1,4 +1,5 @@
 import type { ProLayoutProps } from '@ant-design/pro-components';
+import { OUTLOOK_COLORS } from './theme';
 
 /**
  * OutlookEmail 前端布局默认设置
@@ -6,9 +7,12 @@ import type { ProLayoutProps } from '@ant-design/pro-components';
 const Settings: ProLayoutProps & {
   logo?: string;
 } = {
+  // Keep ProLayout in light mode so content surfaces use the original cream palette.
+  // The sider is styled as the original ink-brown navigation in global.less.
   navTheme: 'light',
-  colorPrimary: '#B85C38',
+  colorPrimary: OUTLOOK_COLORS.primary,
   layout: 'mix',
+  siderWidth: 220,
   contentWidth: 'Fluid',
   fixedHeader: true,
   fixSiderbar: true,
