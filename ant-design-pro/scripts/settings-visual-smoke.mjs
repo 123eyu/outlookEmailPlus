@@ -115,6 +115,22 @@ async function clickText(selector, text) {
   await sleep(700);
 }
 
+async function clickTab(text) {
+  const expression =
+    "(() => { const tabs = Array.from(document.querySelectorAll('.ant-tabs-tab')); const tab = tabs.find((item) => (item.textContent || '').includes(" +
+    JSON.stringify(text) +
+    ")); if (!tab) return false; tab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })); return true; })()";
+  if (!(await evaluate(expression))) {
+    throw new Error('Unable to click tab ' + text);
+  }
+  await waitFor(
+    "document.querySelector('.ant-tabs-tab-active')?.textContent.includes(" +
+      JSON.stringify(text),
+    text + ' tab activation',
+  );
+  await sleep(500);
+}
+
 async function capture(fileName) {
   await evaluate('window.scrollTo(0, 0); true');
   await sleep(300);
@@ -131,7 +147,7 @@ try {
   await send('Runtime.enable');
 
   await navigate(1440, 1200, false);
-  await clickText('[role="tab"]', '通知');
+  await clickTab('通知');
   await clickText('.ant-tabs-tabpane-active button', '测试已保存配置');
   await waitFor(
     "document.body.innerText.includes('上游 HTTP') && document.body.innerText.includes('48 ms')",
@@ -139,7 +155,7 @@ try {
   );
   await capture('settings-webhook.png');
 
-  await clickText('[role="tab"]', '验证码 AI');
+  await clickTab('验证码 AI');
   await clickText('.ant-tabs-tabpane-active button', '测试 AI');
   await waitFor(
     "document.body.innerText.includes('连通性：正常') && document.body.innerText.includes('契约：失败')",
@@ -147,7 +163,7 @@ try {
   );
   await capture('settings-ai.png');
 
-  await clickText('[role="tab"]', '外部 API / 池');
+  await clickTab('外部 API / 池');
   await waitFor(
     "document.body.innerText.includes('Automation') && document.body.innerText.includes('Reporting')",
     'API key table',
@@ -155,7 +171,7 @@ try {
   await capture('settings-api-keys.png');
 
   await navigate(390, 844, true);
-  await clickText('[role="tab"]', '外部 API / 池');
+  await clickTab('外部 API / 池');
   await waitFor(
     "document.body.innerText.includes('Automation')",
     'mobile API key table',
