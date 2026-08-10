@@ -4,6 +4,11 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+### 优化 / Improvements
+
+- **ZER-582 纯白前端服务展示优化**：保持现有纯白主题、导航与全局色板不变；API Key 改为名称 / 状态 / 脱敏 Token / 操作的简洁列表，权限和邮箱范围固定在创建时选择并通过详情查看；Webhook 测试展示已保存配置的真实投递 URL、上游 HTTP 状态、耗时和尝试次数，Token 留空表示清空；AI 测试区分连通性与契约状态，并在请求失败时保留端点、模型和 HTTP 诊断。
+- **版本号更新为 2.9.9**。
+
 ### 集成 / Integration
 
 - **#109 新前端主线回收**：将 polish 分支与功能 PR（#130/#131/#132/#133/#134/#137）统一回收到 `feat/ant-design-pro-frontend-migration`（PR #109）。Railway 测试环境源分支改绑本分支。
