@@ -61,15 +61,15 @@ body,
   --outlook-primary-light: #D4795A;
   --outlook-accent: #C8963E;
   --outlook-jade: #3A7D44;
-  --outlook-success: #27AE60;
-  --outlook-danger: #C0392B;
-  --outlook-warn: #E67E22;
+  --outlook-success: #3A7D44;
+  --outlook-danger: #B6473B;
+  --outlook-warn: #C07F2C;
   --outlook-bg: #F5EDE0;
   --outlook-bg-card: #FDFAF5;
   --outlook-bg-secondary: #F0E8D8;
   --outlook-text: #2C1810;
   --outlook-text-secondary: #6B4226;
-  --outlook-text-muted: #9E7A5A;
+  --outlook-text-muted: #7D5F44;
   --outlook-border: #D9C4A8;
   --outlook-border-light: #EDE0CE;
   --outlook-bg-hover: rgba(184, 92, 56, 0.06);
@@ -78,7 +78,7 @@ body,
   --outlook-sidebar-text: #EDD9BE;
   --outlook-sidebar-text-muted: rgba(237, 217, 190, 0.62);
   --outlook-sidebar-hover: rgba(255, 255, 255, 0.07);
-  --outlook-sidebar-selected: rgba(184, 92, 56, 0.22);
+  --outlook-sidebar-selected: rgba(184, 92, 56, 0.16);
 }
 
 body {
@@ -115,6 +115,9 @@ body {
 .ant-pro-sider .ant-menu-item,
 .ant-pro-sider .ant-menu-submenu-title {
   color: var(--outlook-sidebar-text-muted);
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .ant-pro-sider .ant-menu-item:hover,
@@ -129,9 +132,13 @@ body {
   background: var(--outlook-sidebar-selected) !important;
 }
 
-.ant-pro-sider .ant-menu-item-selected::after {
-  border-inline-end-color: var(--outlook-primary) !important;
+/* 单一左侧品牌指示条：antd 默认右缘 ::after 边框与内阴影叠加会形成双重指示 */
+.ant-pro-sider .ant-menu-item-selected {
   box-shadow: inset 3px 0 0 var(--outlook-primary);
+}
+
+.ant-pro-sider .ant-menu-item-selected::after {
+  border-inline-end: none !important;
 }
 
 .ant-card,

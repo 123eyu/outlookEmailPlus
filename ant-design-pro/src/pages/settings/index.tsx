@@ -1134,12 +1134,28 @@ const SettingsPage: React.FC = () => {
                               {describeAiError(aiTestResult.probe?.error)}
                             </Typography.Text>
                           )}
-                          <Typography.Text>
-                            连通性：
-                            {aiTestResult.connectivity_ok ? '正常' : '失败'}
-                            {'；'}契约：
-                            {aiTestResult.contract_ok ? '通过' : '失败'}
-                          </Typography.Text>
+                          <Space size={8}>
+                            <Tag
+                              color={
+                                aiTestResult.connectivity_ok
+                                  ? 'success'
+                                  : 'error'
+                              }
+                              style={{ marginInlineEnd: 0 }}
+                            >
+                              连通性：
+                              {aiTestResult.connectivity_ok ? '正常' : '失败'}
+                            </Tag>
+                            <Tag
+                              color={
+                                aiTestResult.contract_ok ? 'success' : 'error'
+                              }
+                              style={{ marginInlineEnd: 0 }}
+                            >
+                              契约校验：
+                              {aiTestResult.contract_ok ? '通过' : '失败'}
+                            </Tag>
+                          </Space>
                           <Typography.Text>
                             模型：{aiTestResult.probe?.model || '未返回'}
                           </Typography.Text>
