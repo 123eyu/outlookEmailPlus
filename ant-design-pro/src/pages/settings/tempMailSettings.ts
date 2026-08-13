@@ -13,7 +13,7 @@ export function getInitialSettingsTab(search: string) {
   return SETTINGS_TAB_KEYS.includes(
     requested as (typeof SETTINGS_TAB_KEYS)[number],
   )
-    ? requested!
+    ? requested || 'refresh'
     : 'refresh';
 }
 
