@@ -1304,7 +1304,7 @@ const SettingsPage: React.FC = () => {
                     />
                   </Form.Item>
 
-                  <Divider orientation="left">Cloudflare Worker</Divider>
+                  <Divider orientation="start">Cloudflare Worker</Divider>
                   <Form.Item
                     name="cf_worker_base_url"
                     label="Worker 部署地址"
