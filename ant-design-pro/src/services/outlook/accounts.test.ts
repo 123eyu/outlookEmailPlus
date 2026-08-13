@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { vi } from 'vitest';
 import {
   getResponseHeader,
   isHttpOk,
   parseContentDispositionFilename,
   parseSseDataLines,
+  refreshAllAccounts,
 } from './accounts';
+
+vi.mock('./auth', () => ({
+  ensureCsrfToken: vi.fn().mockResolvedValue('test-csrf-token'),
+  clearCsrfToken: vi.fn(),
+}));
 
 describe('parseSseDataLines', () => {
   it('parses complete SSE data lines and keeps partial carry', () => {
@@ -32,6 +39,57 @@ describe('parseSseDataLines', () => {
       'data: not-json\ndata: {"type":"delay","seconds":1.5}\n',
     );
     expect(parsed.events).toEqual([{ type: 'delay', seconds: 1.5 }]);
+  });
+});
+
+describe('refreshAllAccounts', () => {
+  it('consumes the full-refresh SSE stream and summarizes all counters', async () => {
+    const encoder = new TextEncoder();
+    const events: string[] = [];
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"type":"start","total":3,"delay_seconds":1}\n\n' +
+              'data: {"type":"progress","current":1,"total":3,"success_count":0,"failed_count":0}\n\n' +
+              'data: {"type":"complete","total":3,"success_count":2,"failed_count":1,"failed_list":[{"email":"failed@example.com","error":"invalid token"}]}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(stream, { status: 200 }));
+
+    const result = await refreshAllAccounts({
+      onEvent: (event) => events.push(event.type),
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/accounts/refresh-all',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'include',
+        headers: expect.objectContaining({
+          Accept: 'text/event-stream',
+          'X-CSRFToken': 'test-csrf-token',
+        }),
+      }),
+    );
+    expect(events).toEqual(['start', 'progress', 'complete']);
+    expect(result).toMatchObject({
+      success: true,
+      total: 3,
+      success_count: 2,
+      failed_count: 1,
+      skipped_count: 0,
+    });
+    expect(result.failed_list).toEqual([
+      { email: 'failed@example.com', error: 'invalid token' },
+    ]);
+
+    fetchMock.mockRestore();
   });
 });
 

@@ -48,11 +48,13 @@ import {
   fetchAccounts,
   fetchProviders,
   pickAccountErrorMessage,
+  refreshAllAccounts,
   refreshSelectedAccounts,
   toggleAccountTelegram,
   updateAccount,
   verifyExportPassword,
   type AccountItem,
+  type RefreshAllEvent,
   type RefreshSelectedEvent,
 } from '@/services/outlook/accounts';
 import {
@@ -90,6 +92,8 @@ const AccountsPage: React.FC = () => {
   const [exportGroupIds, setExportGroupIds] = useState<number[]>([]);
   const [exportPassword, setExportPassword] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [refreshAllRunning, setRefreshAllRunning] = useState(false);
+  const refreshAllRunningRef = useRef(false);
 
   const groupsQuery = useQuery({
     queryKey: ['groups'],
@@ -348,6 +352,83 @@ const AccountsPage: React.FC = () => {
     });
   };
 
+  const onRefreshAll = () => {
+    if (refreshAllRunningRef.current) {
+      message.warning('全量 Token 刷新正在执行，请勿重复触发');
+      return;
+    }
+
+    modal.confirm({
+      title: '确认全量刷新 Token？',
+      content:
+        '此操作将刷新全部可刷新的 Outlook 账号 Token，并可能因账号数量和限流持续较长时间。执行期间请勿重复发起刷新。',
+      okText: '立即全量刷新',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        if (refreshAllRunningRef.current) {
+          message.warning('全量 Token 刷新正在执行，请勿重复触发');
+          return;
+        }
+
+        refreshAllRunningRef.current = true;
+        setRefreshAllRunning(true);
+        const loadingKey = 'refresh-all-token';
+        message.loading({
+          content: '正在启动全量 Token 刷新…',
+          key: loadingKey,
+          duration: 0,
+        });
+
+        try {
+          const res = await refreshAllAccounts({
+            onEvent: (event: RefreshAllEvent) => {
+              if (event.type === 'start') {
+                message.loading({
+                  content: `正在全量刷新 Token… 0 / ${event.total}（成功 0，失败 0，跳过 0）`,
+                  key: loadingKey,
+                  duration: 0,
+                });
+              } else if (event.type === 'progress') {
+                message.loading({
+                  content: `正在全量刷新 Token… ${event.current} / ${event.total}（成功 ${event.success_count || 0}，失败 ${event.failed_count || 0}，跳过 0）`,
+                  key: loadingKey,
+                  duration: 0,
+                });
+              } else if (event.type === 'delay') {
+                message.loading({
+                  content: `全量刷新限流等待约 ${Math.ceil(event.seconds)} 秒…`,
+                  key: loadingKey,
+                  duration: 0,
+                });
+              }
+            },
+          });
+
+          actionRef.current?.reload();
+          message.destroy(loadingKey);
+          modal.confirm({
+            title: '全量 Token 刷新已完成',
+            content: `成功 ${res.success_count} 个，失败 ${res.failed_count} 个，跳过 ${res.skipped_count} 个。可前往刷新日志查看明细。`,
+            okText: '查看刷新日志',
+            cancelText: '留在当前页',
+            onOk: () => {
+              window.location.assign('/refresh-log');
+            },
+          });
+        } catch (error: any) {
+          message.error({
+            content: error?.message || '全量 Token 刷新失败',
+            key: loadingKey,
+          });
+        } finally {
+          refreshAllRunningRef.current = false;
+          setRefreshAllRunning(false);
+        }
+      },
+    });
+  };
+
   const onExport = async () => {
     if (!exportGroupIds.length) {
       message.warning('请选择要导出的分组');
@@ -407,6 +488,15 @@ const AccountsPage: React.FC = () => {
             }}
           >
             导出
+          </Button>
+          <Button
+            danger
+            icon={<SyncOutlined />}
+            loading={refreshAllRunning}
+            disabled={refreshAllRunning}
+            onClick={onRefreshAll}
+          >
+            全量刷新 Token
           </Button>
           <Button
             type="primary"

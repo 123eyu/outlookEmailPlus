@@ -713,3 +713,223 @@ export function downloadBlob(blob: Blob, filename: string) {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
+
+/** SSE 事件：与后端 refresh_service.stream_refresh_all_accounts 对齐。 */
+export type RefreshAllEvent = RefreshSelectedEvent;
+
+export type RefreshAllResult = {
+  success: boolean;
+  message: string;
+  total: number;
+  success_count: number;
+  failed_count: number;
+  skipped_count: number;
+  failed_list: Array<{ id?: number; email?: string; error?: string }>;
+};
+
+export type RefreshAllOptions = {
+  signal?: AbortSignal;
+  onEvent?: (event: RefreshAllEvent) => void;
+};
+
+async function getRefreshAllFetch(
+  csrfToken: string | null,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+  };
+  if (csrfToken) {
+    headers['X-CSRFToken'] = csrfToken;
+  }
+  return fetch('/api/accounts/refresh-all', {
+    method: 'GET',
+    credentials: 'include',
+    headers,
+    signal,
+  });
+}
+
+function summarizeRefreshAllComplete(
+  event: Extract<RefreshAllEvent, { type: 'complete' }>,
+): RefreshAllResult {
+  const skippedCount = Math.max(
+    0,
+    event.total - event.success_count - event.failed_count,
+  );
+  const summary = `全量 Token 刷新完成：成功 ${event.success_count} 个，失败 ${event.failed_count} 个，跳过 ${skippedCount} 个`;
+  return {
+    success: true,
+    message: summary,
+    total: event.total,
+    success_count: event.success_count,
+    failed_count: event.failed_count,
+    skipped_count: skippedCount,
+    failed_list: event.failed_list || [],
+  };
+}
+
+/**
+ * 全量刷新所有可刷新 Outlook 账号的 Token。
+ * 后端返回 text/event-stream（start/progress/delay/complete/error），
+ * 使用 fetch 流式解析以实时展示进度。全量任务的超时会在收到 start 事件后
+ * 根据账号数量和限流间隔动态放宽，避免较大账号池被前端过早中断。
+ */
+export async function refreshAllAccounts(
+  options: RefreshAllOptions = {},
+): Promise<RefreshAllResult> {
+  const BOOTSTRAP_TIMEOUT_MS = 60_000;
+  const HEARTBEAT_TIMEOUT_MS = 90_000;
+  const MAX_OVERALL_TIMEOUT_MS = 12 * 60 * 60_000;
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+  }
+
+  let overallTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  const clearTimers = () => {
+    if (overallTimer) clearTimeout(overallTimer);
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    overallTimer = null;
+    heartbeatTimer = null;
+  };
+
+  const armOverall = (timeoutMs: number) => {
+    if (overallTimer) clearTimeout(overallTimer);
+    overallTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+  };
+
+  const armHeartbeat = () => {
+    if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    heartbeatTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, HEARTBEAT_TIMEOUT_MS);
+  };
+
+  armOverall(BOOTSTRAP_TIMEOUT_MS);
+
+  try {
+    let csrf = await ensureCsrfToken();
+    let response = await getRefreshAllFetch(csrf, controller.signal);
+
+    // 与标准请求保持一致：若服务端明确返回 CSRF 错误，则刷新令牌后重试一次。
+    if (response.status === 400) {
+      const peek = await response.clone().text();
+      if (/csrf|CSRF/i.test(peek)) {
+        clearCsrfToken();
+        csrf = await ensureCsrfToken(true);
+        response = await getRefreshAllFetch(csrf, controller.signal);
+      } else {
+        let payload: any = null;
+        try {
+          payload = JSON.parse(peek);
+        } catch {
+          /* ignore */
+        }
+        throw new Error(pickAccountErrorMessage(payload, '全量刷新请求失败'));
+      }
+    }
+
+    if (!response.ok) {
+      let payload: any = null;
+      try {
+        payload = JSON.parse(await response.text());
+      } catch {
+        /* ignore */
+      }
+      throw new Error(pickAccountErrorMessage(payload, '全量刷新请求失败'));
+    }
+
+    if (!response.body) {
+      throw new Error('全量刷新响应缺少流式正文');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let carry = '';
+    let sawTerminal = false;
+    let completeResult: RefreshAllResult | null = null;
+
+    armHeartbeat();
+
+    const handleEvent = (event: RefreshAllEvent) => {
+      options.onEvent?.(event);
+      if (event.type === 'start') {
+        const delaySeconds = Math.max(0, event.delay_seconds || 0);
+        const estimatedPerAccountMs = Math.max(15_000, (delaySeconds + 15) * 1_000);
+        armOverall(
+          Math.min(
+            MAX_OVERALL_TIMEOUT_MS,
+            Math.max(5 * 60_000, event.total * estimatedPerAccountMs),
+          ),
+        );
+      } else if (event.type === 'complete') {
+        completeResult = summarizeRefreshAllComplete(event);
+        sawTerminal = true;
+      } else if (event.type === 'error') {
+        const msg = pickAccountErrorMessage(
+          { error: event.error },
+          '全量刷新执行失败',
+        );
+        const err: any = new Error(msg);
+        err.refreshError = event.error;
+        throw err;
+      }
+    };
+
+    while (!sawTerminal) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      armHeartbeat();
+      const decoded = decoder.decode(value, { stream: true });
+      const { events, rest } = parseSseDataLines(decoded, carry);
+      carry = rest;
+      for (const event of events) {
+        handleEvent(event);
+        if (sawTerminal) break;
+      }
+    }
+
+    if (!sawTerminal && carry.trim()) {
+      const { events } = parseSseDataLines(`${carry}\n`, '');
+      for (const event of events) {
+        handleEvent(event);
+        if (sawTerminal) break;
+      }
+    }
+
+    if (!completeResult) {
+      throw new Error('全量刷新流已结束，但未收到完成事件');
+    }
+    return completeResult;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error(
+        timedOut
+          ? '全量刷新请求超时，请检查网络或刷新日志后重试'
+          : '全量刷新请求已取消',
+      );
+    }
+    throw error;
+  } finally {
+    clearTimers();
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+}
