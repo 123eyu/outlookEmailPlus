@@ -32,7 +32,7 @@ import {
   Typography,
   theme,
 } from 'antd';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type UnsavedChangesDecision,
   useUnsavedChangesGuard,
@@ -61,6 +61,14 @@ import {
   updateSettings,
   validateCron,
 } from '@/services/outlook/settings';
+import { fetchTempEmailOptions } from '@/services/outlook/tempEmails';
+import {
+  formatJsonSetting,
+  getDomainNames,
+  getInitialSettingsTab,
+  parseDomainSetting,
+  parseObjectSetting,
+} from './tempMailSettings';
 import {
   API_KEY_EXPIRY_OPTIONS,
   getApiKeyExpiryLabel,
@@ -124,6 +132,12 @@ const SettingsPage: React.FC = () => {
   const { token } = theme.useToken();
   const [form] = Form.useForm();
   const [keyForm] = Form.useForm();
+  const [activeTab, setActiveTab] = useState(() =>
+    getInitialSettingsTab(
+      typeof window === 'undefined' ? '' : window.location.search,
+    ),
+  );
+  const selectedTempMailProvider = Form.useWatch('temp_mail_provider', form);
   const [saving, setSaving] = useState(false);
   const [creatingKey, setCreatingKey] = useState(false);
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
@@ -152,6 +166,29 @@ const SettingsPage: React.FC = () => {
     queryKey: ['settings'],
     queryFn: fetchSettings,
   });
+  const tempMailOptionsQuery = useQuery({
+    queryKey: ['temp-email-options', 'settings'],
+    queryFn: () => fetchTempEmailOptions(),
+  });
+  const tempMailProviderOptions = useMemo(() => {
+    const catalog = tempMailOptionsQuery.data?.options?.providers || [];
+    const options = catalog
+      .map((provider) => ({
+        label: provider.label || provider.name || '',
+        value: provider.name || '',
+      }))
+      .filter((provider) => provider.value);
+    if (
+      selectedTempMailProvider &&
+      !options.some((provider) => provider.value === selectedTempMailProvider)
+    ) {
+      options.unshift({
+        label: `${selectedTempMailProvider}（当前配置）`,
+        value: selectedTempMailProvider,
+      });
+    }
+    return options;
+  }, [selectedTempMailProvider, tempMailOptionsQuery.data]);
 
   const confirmUnsavedNavigation = useCallback(
     ({ proceed, stay }: UnsavedChangesDecision) => {
@@ -256,8 +293,18 @@ const SettingsPage: React.FC = () => {
       temp_mail_provider: s.temp_mail_provider || '',
       temp_mail_api_base_url: s.temp_mail_api_base_url || '',
       temp_mail_api_key: masks.temp_mail_api_key,
+      temp_mail_domains_text: formatJsonSetting(s.temp_mail_domains, []),
+      temp_mail_default_domain: s.temp_mail_default_domain || '',
+      temp_mail_prefix_rules_text: formatJsonSetting(
+        s.temp_mail_prefix_rules,
+        {},
+      ),
       cf_worker_base_url: s.cf_worker_base_url || '',
       cf_worker_admin_key: masks.cf_worker_admin_key,
+      cf_worker_prefix_rules_text: formatJsonSetting(
+        s.cf_worker_prefix_rules,
+        {},
+      ),
       external_api_public_mode: !!s.external_api_public_mode,
       external_api_rate_limit_per_minute: Number(
         s.external_api_rate_limit_per_minute || 60,
@@ -345,6 +392,27 @@ const SettingsPage: React.FC = () => {
           delete payload[key];
         }
       }
+
+      try {
+        payload.temp_mail_domains = parseDomainSetting(
+          values.temp_mail_domains_text,
+          '临时邮箱可用域名',
+        );
+        payload.temp_mail_prefix_rules = parseObjectSetting(
+          values.temp_mail_prefix_rules_text,
+          '临时邮箱前缀规则',
+        );
+        payload.cf_worker_prefix_rules = parseObjectSetting(
+          values.cf_worker_prefix_rules_text,
+          'Cloudflare Worker 前缀规则',
+        );
+      } catch (error: any) {
+        message.error(error?.message || '临时邮箱配置格式无效');
+        return;
+      }
+      delete payload.temp_mail_domains_text;
+      delete payload.temp_mail_prefix_rules_text;
+      delete payload.cf_worker_prefix_rules_text;
 
       // IP 白名单：文本 → string[]
       const wlText = String(values.external_api_ip_whitelist_text || '');
@@ -755,6 +823,8 @@ const SettingsPage: React.FC = () => {
           />
         ) : null}
         <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
           items={[
             {
               key: 'refresh',
@@ -1164,6 +1234,129 @@ const SettingsPage: React.FC = () => {
               ),
             },
             {
+              key: 'temp-mail',
+              label: '临时邮箱',
+              children: (
+                <ProCard variant="outlined">
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="临时邮箱服务配置"
+                    description="这里的配置会直接影响临时邮箱的创建、域名选择和前缀校验。插件自身参数请前往插件管理。"
+                    style={{ marginBottom: 20 }}
+                  />
+                  <Form.Item
+                    name="temp_mail_provider"
+                    label="全局临时邮箱 Provider"
+                    rules={[{ required: true, message: '请选择临时邮箱 Provider' }]}
+                  >
+                    <Select
+                      showSearch
+                      loading={tempMailOptionsQuery.isLoading}
+                      options={tempMailProviderOptions}
+                      placeholder="请选择 Provider"
+                      optionFilterProp="label"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="temp_mail_api_base_url"
+                    label="临时邮箱 API Base URL"
+                    extra="Legacy Bridge 或自定义临时邮箱服务地址。"
+                  >
+                    <Input placeholder="https://mail.example.com" />
+                  </Form.Item>
+                  <Form.Item
+                    name="temp_mail_api_key"
+                    label="临时邮箱 API Key"
+                    extra={
+                      sMeta.temp_mail_api_key_set
+                        ? `已设置：${sMeta.temp_mail_api_key_masked || ''}`
+                        : '未设置'
+                    }
+                  >
+                    <Input.Password
+                      visibilityToggle
+                      placeholder="输入新密钥以更新；留空表示不修改"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="temp_mail_domains_text"
+                    label="可用域名（JSON）"
+                    extra="支持字符串数组或 { name, enabled } 对象数组。"
+                  >
+                    <Input.TextArea
+                      rows={5}
+                      style={{ fontFamily: 'monospace' }}
+                      placeholder={'[\n  {"name": "mail.example.com", "enabled": true}\n]'}
+                    />
+                  </Form.Item>
+                  <Form.Item name="temp_mail_default_domain" label="默认域名">
+                    <Input placeholder="mail.example.com" />
+                  </Form.Item>
+                  <Form.Item
+                    name="temp_mail_prefix_rules_text"
+                    label="前缀规则（JSON）"
+                  >
+                    <Input.TextArea
+                      rows={5}
+                      style={{ fontFamily: 'monospace' }}
+                      placeholder={'{\n  "min_length": 1,\n  "max_length": 32,\n  "pattern": "^[a-z0-9][a-z0-9._-]*$"\n}'}
+                    />
+                  </Form.Item>
+
+                  <Divider orientation="left">Cloudflare Worker</Divider>
+                  <Form.Item
+                    name="cf_worker_base_url"
+                    label="Worker 部署地址"
+                  >
+                    <Input placeholder="https://mail.example.workers.dev" />
+                  </Form.Item>
+                  <Form.Item
+                    name="cf_worker_admin_key"
+                    label="Worker Admin 密钥"
+                    extra={
+                      sMeta.cf_worker_admin_key_set
+                        ? `已设置：${sMeta.cf_worker_admin_key_masked || ''}`
+                        : '未设置'
+                    }
+                  >
+                    <Input.Password
+                      visibilityToggle
+                      placeholder="输入新管理密钥以更新；留空表示不修改"
+                    />
+                  </Form.Item>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Button
+                      icon={<SyncOutlined />}
+                      loading={cfSyncLoading}
+                      onClick={() => void onSyncCfDomains()}
+                    >
+                      从 Cloudflare Worker 同步域名
+                    </Button>
+                    <Typography.Text type="secondary">
+                      可用域名：
+                      {getDomainNames(sMeta.cf_worker_domains).join(', ') ||
+                        '尚未同步'}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      默认域名：{sMeta.cf_worker_default_domain || '尚未同步'}
+                    </Typography.Text>
+                  </Space>
+                  <Form.Item
+                    name="cf_worker_prefix_rules_text"
+                    label="Cloudflare Worker 前缀规则（JSON）"
+                    style={{ marginTop: 20 }}
+                  >
+                    <Input.TextArea
+                      rows={5}
+                      style={{ fontFamily: 'monospace' }}
+                      placeholder={'{\n  "min_length": 1,\n  "max_length": 32,\n  "pattern": "^[a-z0-9][a-z0-9._-]*$"\n}'}
+                    />
+                  </Form.Item>
+                </ProCard>
+              ),
+            },
+            {
               key: 'external',
               label: '外部 API / 池',
               children: (
@@ -1404,64 +1597,6 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="temp_mail_provider" label="临时邮箱服务商">
-                    <Input placeholder="如 gptmail / custom" />
-                  </Form.Item>
-                  <Form.Item
-                    name="temp_mail_api_base_url"
-                    label="临时邮箱接口地址"
-                  >
-                    <Input placeholder="https://..." />
-                  </Form.Item>
-                  <Form.Item
-                    name="temp_mail_api_key"
-                    label="临时邮箱接口密钥"
-                    extra={
-                      sMeta.temp_mail_api_key_set
-                        ? `已设置：${sMeta.temp_mail_api_key_masked || ''}`
-                        : '未设置'
-                    }
-                  >
-                    <Input.Password
-                      visibilityToggle
-                      placeholder="输入新密钥以更新"
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    name="cf_worker_base_url"
-                    label="Cloudflare Worker 地址"
-                  >
-                    <Input placeholder="https://..." />
-                  </Form.Item>
-                  <Form.Item
-                    name="cf_worker_admin_key"
-                    label="Cloudflare Worker 管理密钥"
-                    extra={
-                      sMeta.cf_worker_admin_key_set
-                        ? `已设置：${sMeta.cf_worker_admin_key_masked || ''}`
-                        : '未设置'
-                    }
-                  >
-                    <Input.Password
-                      visibilityToggle
-                      placeholder="输入新管理密钥以更新"
-                    />
-                  </Form.Item>
-                  <Space>
-                    <Button
-                      icon={<SyncOutlined />}
-                      loading={cfSyncLoading}
-                      onClick={() => void onSyncCfDomains()}
-                    >
-                      同步 Cloudflare Worker 域名
-                    </Button>
-                    {Array.isArray(sMeta.cf_worker_domains) &&
-                    sMeta.cf_worker_domains.length ? (
-                      <Typography.Text type="secondary">
-                        当前域：{sMeta.cf_worker_domains.join(', ')}
-                      </Typography.Text>
-                    ) : null}
-                  </Space>
                 </div>
               ),
             },
