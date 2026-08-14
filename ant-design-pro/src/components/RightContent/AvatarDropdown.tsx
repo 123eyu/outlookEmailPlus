@@ -9,6 +9,9 @@ import { Spin } from 'antd';
 import React, { startTransition } from 'react';
 import { outLogin } from '@/services/outlook/auth';
 import HeaderDropdown from '../HeaderDropdown';
+import { persistNavTheme } from './ThemeToggle';
+
+const isDev = process.env.NODE_ENV === 'development';
 
 type GlobalHeaderRightProps = {
   children?: React.ReactNode;
@@ -70,7 +73,19 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       return;
     }
     if (key === 'theme') {
-      setInitialState((s) => ({ ...s, settingDrawerOpen: true }));
+      // ZER-658：生产环境没有开发态抽屉，菜单项直接切换浅色/深色；
+      // 开发环境保留打开 SettingDrawer 的行为。
+      if (isDev) {
+        setInitialState((s) => ({ ...s, settingDrawerOpen: true }));
+      } else {
+        const current = initialState?.settings?.navTheme;
+        const next = current === 'realDark' ? 'light' : 'realDark';
+        persistNavTheme(next);
+        setInitialState((s) => ({
+          ...s,
+          settings: { ...s?.settings, navTheme: next },
+        }));
+      }
       return;
     }
     if (key === 'settings') {
