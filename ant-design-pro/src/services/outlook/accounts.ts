@@ -46,6 +46,8 @@ export type AccountListParams = {
   sort_by?: 'refresh_time' | 'email';
   sort_order?: 'asc' | 'desc';
   tag_id?: number | number[];
+  /** 逗号分隔的标签 ID，与后端 /api/accounts 的 tag_ids 参数对应 */
+  tag_ids?: string;
 };
 
 export async function fetchAccounts(params: AccountListParams = {}) {
