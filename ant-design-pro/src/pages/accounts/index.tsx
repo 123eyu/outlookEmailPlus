@@ -6,6 +6,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SyncOutlined,
+  TagsOutlined,
 } from '@ant-design/icons';
 import {
   ModalForm,
@@ -24,6 +25,7 @@ import { useIntl } from '@umijs/max';
 import {
   App,
   Button,
+  Dropdown,
   Form,
   Input,
   Modal,
@@ -63,6 +65,14 @@ import {
   type GroupItem,
 } from '@/services/outlook/groups';
 import {
+  batchManageAccountTags,
+  createTag,
+  deleteTag as deleteTagApi,
+  fetchTags,
+  serializeTagIds,
+  type TagItem,
+} from '@/services/outlook/tags';
+import {
   ACCOUNT_STATUS_OPTIONS,
   accountStatusLabel,
   refreshStatusLabel,
@@ -75,6 +85,18 @@ const statusColor = (status?: string) => {
   if (s === 'error' || s === 'failed') return 'error';
   return 'processing';
 };
+
+/** 把后端 tags 字段归一化成 TagItem[]（兼容字符串形态） */
+const normalizeTags = (
+  tags?: Array<{ id?: number; name?: string; color?: string } | string>,
+): TagItem[] =>
+  (tags || []).map((t) =>
+    typeof t === 'string' ? { id: 0, name: t } : {
+      id: Number(t.id || 0),
+      name: String(t.name || ''),
+      color: t.color,
+    },
+  );
 
 const AccountsPage: React.FC = () => {
   const { message, modal } = App.useApp();
@@ -94,6 +116,10 @@ const AccountsPage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [refreshAllRunning, setRefreshAllRunning] = useState(false);
   const refreshAllRunningRef = useRef(false);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#1677ff');
+  const [tagCreating, setTagCreating] = useState(false);
 
   const groupsQuery = useQuery({
     queryKey: ['groups'],
@@ -103,6 +129,22 @@ const AccountsPage: React.FC = () => {
     queryKey: ['providers'],
     queryFn: fetchProviders,
   });
+  const tagsQuery = useQuery({
+    queryKey: ['tags'],
+    queryFn: fetchTags,
+  });
+  const tags: TagItem[] = useMemo(
+    () => tagsQuery.data?.tags || [],
+    [tagsQuery.data],
+  );
+  const tagOptions = useMemo(
+    () =>
+      tags.map((t) => ({
+        label: t.name,
+        value: t.id,
+      })),
+    [tags],
+  );
 
   const normalGroups = useMemo(() => {
     return (groupsQuery.data?.groups || []).filter(
@@ -228,6 +270,37 @@ const AccountsPage: React.FC = () => {
       ),
     },
     {
+      title: '标签',
+      dataIndex: 'tags',
+      width: 180,
+      search: false,
+      render: (_, row) => {
+        const list = normalizeTags(row.tags);
+        if (!list.length) return '--';
+        return (
+          <Space size={4} wrap>
+            {list.map((t, idx) => (
+              <Tag key={t.id || `${t.name}-${idx}`} color={t.color}>
+                {t.name}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '标签筛选',
+      dataIndex: 'tag_ids',
+      valueType: 'select',
+      hideInTable: true,
+      fieldProps: {
+        mode: 'multiple',
+        placeholder: '按标签筛选',
+        options: tagOptions,
+        loading: tagsQuery.isLoading,
+      },
+    },
+    {
       title: '备注',
       dataIndex: 'remark',
       ellipsis: true,
@@ -253,7 +326,7 @@ const AccountsPage: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 240,
+      width: 300,
       render: (_, row) => [
         <Button
           key="mailbox"
@@ -263,6 +336,27 @@ const AccountsPage: React.FC = () => {
         >
           邮件
         </Button>,
+        <Dropdown
+          key="tags"
+          menu={{
+            items: tags.length
+              ? tags.map((t) => {
+                  const has = normalizeTags(row.tags).some(
+                    (x) => x.id === t.id,
+                  );
+                  return {
+                    key: String(t.id),
+                    label: `${has ? '✓ ' : '+ '}${t.name}`,
+                    onClick: () => void onToggleRowTag(row, t),
+                  };
+                })
+              : [{ key: 'empty', label: '暂无标签，请先在标签管理中新建', disabled: true }],
+          }}
+        >
+          <Button type="link" icon={<TagsOutlined />}>
+            打标
+          </Button>
+        </Dropdown>,
         <Button
           key="edit"
           type="link"
@@ -327,6 +421,79 @@ const AccountsPage: React.FC = () => {
       actionRef.current?.reload();
     } catch (error: any) {
       message.error(error?.message || '通知切换失败');
+    }
+  };
+
+  // 行内打标：已有该标签则移除，没有则添加
+  const onToggleRowTag = async (row: AccountItem, tag: TagItem) => {
+    const has = normalizeTags(row.tags).some((t) => t.id === tag.id);
+    try {
+      const res = await batchManageAccountTags(
+        [row.id],
+        tag.id,
+        has ? 'remove' : 'add',
+      );
+      if (res?.success === false) {
+        message.error(pickAccountErrorMessage(res, '标签操作失败'));
+        return;
+      }
+      message.success(res.message || (has ? '已移除标签' : '已添加标签'));
+      actionRef.current?.reload();
+    } catch (error: any) {
+      message.error(error?.message || '标签操作失败');
+    }
+  };
+
+  const runBatchTag = async (tagId: number, action: 'add' | 'remove') => {
+    const tag = tags.find((t) => t.id === tagId);
+    if (!tag) return;
+    await runBatch(
+      `${action === 'add' ? '为选中账号添加' : '从选中账号移除'}标签「${tag.name}」？`,
+      async () => {
+        const res = await batchManageAccountTags(selectedIds, tagId, action);
+        if (res?.success === false) {
+          throw new Error(pickAccountErrorMessage(res, '标签操作失败'));
+        }
+        message.success(res.message || '标签操作完成');
+      },
+    );
+  };
+
+  const onCreateTag = async () => {
+    const name = newTagName.trim();
+    if (!name) {
+      message.warning('请输入标签名称');
+      return;
+    }
+    setTagCreating(true);
+    try {
+      const res = await createTag(name, newTagColor);
+      if (res?.success === false) {
+        message.error(pickAccountErrorMessage(res, '标签创建失败'));
+        return;
+      }
+      message.success(res.message || '标签创建成功');
+      setNewTagName('');
+      await tagsQuery.refetch();
+    } catch (error: any) {
+      message.error(error?.message || '标签创建失败');
+    } finally {
+      setTagCreating(false);
+    }
+  };
+
+  const onDeleteTag = async (tagId: number) => {
+    try {
+      const res = await deleteTagApi(tagId);
+      if (res?.success === false) {
+        message.error(pickAccountErrorMessage(res, '标签删除失败'));
+        return;
+      }
+      message.success(res.message || '标签已删除');
+      await tagsQuery.refetch();
+      actionRef.current?.reload();
+    } catch (error: any) {
+      message.error(error?.message || '标签删除失败');
     }
   };
 
@@ -594,6 +761,26 @@ const AccountsPage: React.FC = () => {
             >
               关通知
             </Button>
+            <Select
+              size="small"
+              placeholder="添加标签"
+              style={{ width: 140 }}
+              options={tagOptions}
+              value={null}
+              onChange={(tagId: number | undefined) => {
+                if (tagId != null) void runBatchTag(tagId, 'add');
+              }}
+            />
+            <Select
+              size="small"
+              placeholder="移除标签"
+              style={{ width: 140 }}
+              options={tagOptions}
+              value={null}
+              onChange={(tagId: number | undefined) => {
+                if (tagId != null) void runBatchTag(tagId, 'remove');
+              }}
+            />
             <Button
               size="small"
               icon={<SyncOutlined />}
@@ -717,6 +904,13 @@ const AccountsPage: React.FC = () => {
                 actionRef.current?.reload();
               }}
             />,
+            <Button
+              key="tag-manager"
+              icon={<TagsOutlined />}
+              onClick={() => setTagManagerOpen(true)}
+            >
+              标签管理
+            </Button>,
           ],
         }}
         request={async (params) => {
@@ -726,6 +920,9 @@ const AccountsPage: React.FC = () => {
               page_size: params.pageSize || 20,
               search: (params.email as string) || undefined,
               group_id: groupId,
+              tag_ids: serializeTagIds(
+                Array.isArray(params.tag_ids) ? params.tag_ids : undefined,
+              ),
               sort_by: 'refresh_time',
               sort_order: 'asc',
             });
@@ -988,6 +1185,69 @@ const AccountsPage: React.FC = () => {
             <Input.TextArea rows={2} maxLength={200} showCount />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="标签管理"
+        open={tagManagerOpen}
+        footer={null}
+        onCancel={() => setTagManagerOpen(false)}
+        width={520}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <Space size={4} wrap>
+            {tags.length ? (
+              tags.map((t) => (
+                <Popconfirm
+                  key={t.id}
+                  title={`确认删除标签「${t.name}」？将解除所有账号的关联。`}
+                  onConfirm={() => void onDeleteTag(t.id)}
+                >
+                  <Tag color={t.color} style={{ cursor: 'pointer' }}>
+                    {t.name} ×
+                  </Tag>
+                </Popconfirm>
+              ))
+            ) : (
+              <Typography.Text type="secondary">暂无标签</Typography.Text>
+            )}
+          </Space>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder="新标签名称"
+              value={newTagName}
+              maxLength={50}
+              onChange={(e) => setNewTagName(e.target.value)}
+              onPressEnter={() => void onCreateTag()}
+              style={{ width: '60%' }}
+            />
+            <input
+              type="color"
+              aria-label="标签颜色"
+              value={newTagColor}
+              onChange={(e) => setNewTagColor(e.target.value)}
+              style={{
+                width: 48,
+                height: 32,
+                border: '1px solid #d9d9d9',
+                borderRadius: 6,
+                background: '#fff',
+                padding: 2,
+                cursor: 'pointer',
+              }}
+            />
+            <Button
+              type="primary"
+              loading={tagCreating}
+              onClick={() => void onCreateTag()}
+            >
+              新建标签
+            </Button>
+          </Space.Compact>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            点击标签可删除；在账号列表通过「打标」为账号添加或移除标签。
+          </Typography.Text>
+        </Space>
       </Modal>
 
       <Modal
