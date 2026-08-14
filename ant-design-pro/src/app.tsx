@@ -17,7 +17,13 @@ import {
   GithubLink,
   LangDropdown,
   OfflineBanner,
+  ThemeToggle,
 } from '@/components';
+import {
+  loadPersistedNavTheme,
+  persistNavTheme,
+  type AppNavTheme,
+} from '@/components/RightContent/ThemeToggle';
 import {
   ensureCsrfToken,
   type OutlookCurrentUser,
@@ -68,18 +74,23 @@ export async function getInitialState(): Promise<{
   };
   // 如果不是登录页面，执行
   const { location } = history;
+  // 主题优先级：localStorage 持久化偏好 > 默认设置（ZER-658）
+  const initialSettings = {
+    ...defaultSettings,
+    navTheme: loadPersistedNavTheme(defaultSettings.navTheme as AppNavTheme),
+  } as Partial<LayoutSettings>;
   if (![loginPath].includes(location.pathname)) {
     const currentUser = await fetchUserInfo();
     return {
       fetchUserInfo,
       currentUser,
-      settings: defaultSettings as Partial<LayoutSettings>,
+      settings: initialSettings,
       settingDrawerOpen: false,
     };
   }
   return {
     fetchUserInfo,
-    settings: defaultSettings as Partial<LayoutSettings>,
+    settings: initialSettings,
     settingDrawerOpen: false,
   };
 }
@@ -107,6 +118,17 @@ export const layout: RunTimeLayoutConfig = ({
         (initialState?.settings as { locale?: boolean })?.locale !== false;
       return [
         <GithubLink key="github" />,
+        <ThemeToggle
+          key="theme"
+          navTheme={initialState?.settings?.navTheme as AppNavTheme | undefined}
+          onChange={(theme) => {
+            persistNavTheme(theme);
+            setInitialState((s) => ({
+              ...s,
+              settings: { ...s?.settings, navTheme: theme },
+            }));
+          }}
+        />,
         localeEnabled && <LangDropdown key="lang" />,
       ].filter(Boolean);
     },
@@ -149,24 +171,28 @@ export const layout: RunTimeLayoutConfig = ({
       return (
         <>
           {children}
-          <SettingDrawer
-            disableUrlParams
-            enableDarkTheme
-            collapse={initialState?.settingDrawerOpen}
-            onCollapseChange={(open) => {
-              setInitialState((s) => ({
-                ...s,
-                settingDrawerOpen: open,
-              }));
-            }}
-            settings={initialState?.settings}
-            onSettingChange={(settings) => {
-              setInitialState((s) => ({
-                ...s,
-                settings,
-              }));
-            }}
-          />
+          {/* ZER-658：开发态设置抽屉仅在开发环境渲染；
+              生产环境使用右上角正式主题切换入口 */}
+          {isDev && (
+            <SettingDrawer
+              disableUrlParams
+              enableDarkTheme
+              collapse={initialState?.settingDrawerOpen}
+              onCollapseChange={(open) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settingDrawerOpen: open,
+                }));
+              }}
+              settings={initialState?.settings}
+              onSettingChange={(settings) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settings,
+                }));
+              }}
+            />
+          )}
         </>
       );
     },

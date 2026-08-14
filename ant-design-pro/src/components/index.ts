@@ -6,7 +6,7 @@
  * 布局组件
  */
 import Footer from './Footer';
-import { GithubLink, LangDropdown } from './RightContent';
+import { GithubLink, LangDropdown, ThemeToggle } from './RightContent';
 import { AvatarDropdown } from './RightContent/AvatarDropdown';
 
 /**
@@ -15,4 +15,4 @@ import { AvatarDropdown } from './RightContent/AvatarDropdown';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as OfflineBanner } from './OfflineBanner';
 
-export { AvatarDropdown, Footer, GithubLink, LangDropdown };
+export { AvatarDropdown, Footer, GithubLink, LangDropdown, ThemeToggle };
