@@ -2,6 +2,8 @@ import {
   DeleteOutlined,
   EditOutlined,
   ExportOutlined,
+  KeyOutlined,
+  LoadingOutlined,
   MailOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -64,6 +66,7 @@ import {
   isTempMailboxGroup,
   type GroupItem,
 } from '@/services/outlook/groups';
+import { extractEmailVerification } from '@/services/outlook/emails';
 import {
   batchManageAccountTags,
   createTag,
@@ -120,6 +123,14 @@ const AccountsPage: React.FC = () => {
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState('#1677ff');
   const [tagCreating, setTagCreating] = useState(false);
+  // 行内验证码提取状态（ZER-660）：key 为账号 id
+  const [extractingIds, setExtractingIds] = useState<Set<number>>(new Set());
+  const [extractResult, setExtractResult] = useState<{
+    email: string;
+    code?: string;
+    link?: string;
+    raw?: any;
+  } | null>(null);
 
   const groupsQuery = useQuery({
     queryKey: ['groups'],
@@ -326,8 +337,30 @@ const AccountsPage: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 300,
+      width: 400,
       render: (_, row) => [
+        <Button
+          key="extract-code"
+          type="link"
+          icon={
+            extractingIds.has(row.id) ? <LoadingOutlined /> : <KeyOutlined />
+          }
+          disabled={extractingIds.has(row.id)}
+          onClick={() => void onExtractCode(row)}
+        >
+          验证码
+        </Button>,
+        <Select
+          key="move-group"
+          size="small"
+          placeholder="移组"
+          style={{ width: 110 }}
+          value={null}
+          options={groupOptions}
+          onChange={(gid) => {
+            if (gid != null) void onMoveGroup(row, Number(gid));
+          }}
+        />,
         <Button
           key="mailbox"
           type="link"
@@ -494,6 +527,50 @@ const AccountsPage: React.FC = () => {
       actionRef.current?.reload();
     } catch (error: any) {
       message.error(error?.message || '标签删除失败');
+    }
+  };
+
+  // 行内验证码提取（ZER-660）：与旧站简洁模式验证码 chip 对齐
+  const onExtractCode = async (row: AccountItem) => {
+    if (extractingIds.has(row.id)) return;
+    setExtractingIds((prev) => new Set(prev).add(row.id));
+    try {
+      const res = await extractEmailVerification(row.email);
+      if (res?.success === false || (!res?.data && !res?.message)) {
+        message.error(res?.message || '未提取到验证码');
+        return;
+      }
+      const data = res?.data || {};
+      const code = data.verification_code || data.code || data.formatted || '';
+      const link = data.verification_link || data.link || '';
+      if (!code && !link) {
+        message.warning(res?.message || '最新邮件中未识别到验证码');
+        return;
+      }
+      setExtractResult({ email: row.email, code, link, raw: res });
+    } catch (error: any) {
+      message.error(error?.message || '验证码提取失败');
+    } finally {
+      setExtractingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
+  };
+
+  // 行内快速移动分组（ZER-660）：对齐旧站简洁模式行内「移动分组」
+  const onMoveGroup = async (row: AccountItem, gid: number) => {
+    try {
+      const res = await batchUpdateAccountGroup([row.id], gid);
+      if (res?.success === false) {
+        message.error(pickAccountErrorMessage(res, '移动分组失败'));
+        return;
+      }
+      message.success(res.message || '已移动分组');
+      actionRef.current?.reload();
+    } catch (error: any) {
+      message.error(error?.message || '移动分组失败');
     }
   };
 
@@ -1247,6 +1324,52 @@ const AccountsPage: React.FC = () => {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             点击标签可删除；在账号列表通过「打标」为账号添加或移除标签。
           </Typography.Text>
+        </Space>
+      </Modal>
+
+      <Modal
+        title={`验证码 · ${extractResult?.email || ''}`}
+        open={!!extractResult}
+        onCancel={() => setExtractResult(null)}
+        footer={[
+          <Button key="close" onClick={() => setExtractResult(null)}>
+            关闭
+          </Button>,
+        ]}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          {extractResult?.code ? (
+            <div>
+              <Typography.Text type="secondary">验证码</Typography.Text>
+              <Typography.Paragraph
+                copyable={{ text: extractResult.code }}
+                style={{ fontSize: 20, marginBottom: 0, fontWeight: 600 }}
+              >
+                {extractResult.code}
+              </Typography.Paragraph>
+            </div>
+          ) : null}
+          {extractResult?.link ? (
+            <div>
+              <Typography.Text type="secondary">验证链接</Typography.Text>
+              <Typography.Paragraph
+                copyable={{ text: extractResult.link }}
+                ellipsis={{ rows: 2 }}
+                style={{ marginBottom: 0 }}
+              >
+                {extractResult.link}
+              </Typography.Paragraph>
+            </div>
+          ) : null}
+          <Button
+            type="link"
+            icon={<MailOutlined />}
+            href={`/mailbox?account=${encodeURIComponent(
+              extractResult?.email || '',
+            )}`}
+          >
+            前往邮箱查看邮件
+          </Button>
         </Space>
       </Modal>
 
