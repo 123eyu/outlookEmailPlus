@@ -312,7 +312,7 @@ const TempEmailsPage: React.FC = () => {
       <Button
         size="small"
         icon={<SettingOutlined />}
-        onClick={() => history.push('/settings')}
+        onClick={() => history.push('/settings?tab=temp-mail')}
       >
         临时邮箱设置
       </Button>
