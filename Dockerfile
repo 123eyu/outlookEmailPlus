@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1
+#
+# 默认镜像（新前端 SPA 模式）
+# =====================================================================
+# 本文件构建「新前端」版本：先构建 ant-design-pro（Ant Design Pro + Umi Max）
+# 静态产物，再与 Flask 后端一起打包，SPA_ENABLED=true 由 Flask 直接托管前端。
+# 如需「旧前端」镜像（无 Node 构建、templates/static 旧界面），使用：
+#   docker build -f Dockerfile.legacy -t outlook-email-plus-legacy .
+# =====================================================================
 
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /frontend

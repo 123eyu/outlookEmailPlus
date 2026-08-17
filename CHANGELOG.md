@@ -2,13 +2,14 @@
 
 All notable changes to OutlookMail Plus are documented in this file.
 
-## [Unreleased]
+## [v2.9.10] - 2026-08-17
 
 ### 优化 / Improvements
 
 - **ZER-657 新前端临时邮箱设置迁移补齐**：临时邮箱页的设置入口直达独立设置页签；恢复 Provider、API、域名、默认域名、前缀规则和 Cloudflare Worker 配置，并补充 JSON 结构校验、脱敏密钥保护与域名对象展示兼容。
 - **ZER-582 纯白前端服务展示优化**：保持现有纯白主题、导航与全局色板不变；API Key 改为名称 / 状态 / 脱敏 Token / 操作的简洁列表，权限和邮箱范围固定在创建时选择并通过详情查看；Webhook 测试展示已保存配置的真实投递 URL、上游 HTTP 状态、耗时和尝试次数，Token 留空表示清空；AI 测试区分连通性与契约状态，并在请求失败时保留端点、模型和 HTTP 诊断。
 - **版本号更新为 2.9.10**。
+- **双镜像发布**：仓库提供两套 Dockerfile —— `Dockerfile`（默认，新前端 Ant Design Pro SPA）与 `Dockerfile.legacy`（旧前端）。Tag 发布时 CI 同时构建并推送两个镜像：`outlook-email-plus:v2.9.10`（SPA）与 `outlook-email-plus-legacy:v2.9.10-legacy`，部署时按前端模式选择镜像。
 
 ### 集成 / Integration
 
