@@ -8,6 +8,9 @@ on:
       - main
       - master
       - dev          # dev 分支自动构建 :dev 标签
+      - feat/ant-design-pro-frontend-migration
+      - cursor/zer-381-frontend-polish-b985
+      - cursor/railway-spa-deploy-e902
     paths:
       - '**.py'
       - 'pyproject.toml'
@@ -15,6 +18,7 @@ on:
       - 'Dockerfile'
       - 'templates/**'
       - 'static/**'
+      - 'ant-design-pro/**'
       - '.github/workflows/docker-build-push.yml'
   workflow_dispatch:
 
