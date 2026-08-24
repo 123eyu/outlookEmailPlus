@@ -2,6 +2,13 @@
 
 All notable changes to OutlookMail Plus are documented in this file.
 
+## [v2.9.11] - 2026-08-24
+
+### 修复 / Bug Fixes
+
+- **ZER-575 Provider 插件边界收敛**：邮箱池从运行时注册表识别第三方 Provider，并统一支持按 Provider 领取、动态创建、持久化和写库失败回滚。
+- **统一临时邮箱生命周期**：所有 Provider 均使用标准 `temp_mail` 状态机；插件不再引入专用数据库字段、关联表或成功后复用分支。
+
 ## [v2.9.10] - 2026-08-17
 
 ### 优化 / Improvements
